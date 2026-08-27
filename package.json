@@ -1,0 +1,40 @@
+{
+  "name": "local_dbmanager",
+  "version": "0.1.0",
+  "description": "Local database environment manager",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "build": "npm run build:electron && npm run build:frontend",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build:frontend": "npm --prefix frontend run build",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:electron": "set LOCAL_DB_MANAGER_DEV_URL=http://localhost:5173&& npm run build:electron && electron .",
+    "start": "npm run build && electron .",
+    "package": "npm run build && electron-builder"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.0.0",
+    "typescript": "^5.0.0"
+  },
+  "build": {
+    "appId": "com.localdbmanager.app",
+    "productName": "Local DB Manager",
+    "asar": true,
+    "files": [
+      "dist-electron/**/*",
+      "frontend/dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "dependencies": {
+    "mysql2": "^3.24.2"
+  }
+}
