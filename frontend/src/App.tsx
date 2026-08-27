@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import type {
   Database,
@@ -7,12 +8,74 @@ import type {
   TableDetails
 } from "./types/database";
 
+import "./App.css";
+
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
 function statusLabel(status: DatabaseStatus): string {
   return status.replace("-", " ").replace(/^\w/, character => character.toUpperCase());
+}
+
+function formatCreatedAt(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Unknown"
+    : date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+type IconName =
+  | "activity"
+  | "arrow"
+  | "backup"
+  | "database"
+  | "external"
+  | "layers"
+  | "logs"
+  | "menu"
+  | "play"
+  | "plus"
+  | "refresh"
+  | "search"
+  | "server"
+  | "settings"
+  | "stop"
+  | "trash";
+
+function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
+  const paths: Record<IconName, ReactNode> = {
+    activity: <path d="M3 12h3l2-7 4 14 2-7h4" />,
+    arrow: <path d="m5 12 5 5 9-9" />,
+    backup: <><path d="M12 3v10" /><path d="m8 7 4-4 4 4" /><path d="M5 13v6h14v-6" /></>,
+    database: <><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v7c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 12v7c0 1.7 3.1 3 7 3s7-1.3 7-3v-7" /></>,
+    external: <><path d="M14 4h6v6" /><path d="m20 4-9 9" /><path d="M18 13v6H4V5h6" /></>,
+    layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5" /><path d="m3 16 9 5 9-5" /></>,
+    logs: <><path d="M5 4h14v16H5z" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
+    menu: <><path d="M4 7h16M4 12h16M4 17h16" /></>,
+    play: <path d="m8 5 11 7-11 7V5Z" />,
+    plus: <path d="M12 5v14M5 12h14" />,
+    refresh: <><path d="M20 11a8 8 0 0 0-14.7-4L3 10" /><path d="M3 5v5h5" /><path d="M4 13a8 8 0 0 0 14.7 4L21 14" /><path d="M21 19v-5h-5" /></>,
+    search: <><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></>,
+    server: <><rect x="4" y="4" width="16" height="6" rx="1" /><rect x="4" y="14" width="16" height="6" rx="1" /><path d="M8 7h.01M8 17h.01" /></>,
+    settings: <><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path d="m19.4 15 .1.1a2 2 0 1 1-2.8 2.8l-.1-.1a2 2 0 0 0-3.4 1.4v.3a2 2 0 1 1-4 0v-.2a2 2 0 0 0-3.4-1.5l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A2 2 0 0 0 1.7 12a2 2 0 1 1 0-4h.2a2 2 0 0 0 1.5-3.4l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A2 2 0 0 0 9.6.3H10a2 2 0 1 1 4 0v.2a2 2 0 0 0 3.4 1.5l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A2 2 0 0 0 21.7 8h.3a2 2 0 1 1 0 4h-.2a2 2 0 0 0-1.5 3.4Z" /></>,
+    stop: <path d="M6 6h12v12H6z" />,
+    trash: <><path d="M4 7h16M10 11v6M14 11v6" /><path d="M6 7l1 13h10l1-13M9 7V4h6v3" /></>
+  };
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="icon"
+      fill="none"
+      height={size}
+      viewBox="0 0 24 24"
+      width={size}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {paths[name]}
+    </svg>
+  );
 }
 
 function App() {
@@ -47,6 +110,7 @@ function App() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -86,20 +150,46 @@ function App() {
 
   async function createDatabase() {
     setError("");
+
+    const trimmedName = name.trim();
+    const trimmedDatabaseName = databaseName.trim();
+    const parsedPort = Number(port);
+
+    if (!trimmedName) {
+      setError("Enter an environment name.");
+      return;
+    }
+
+    if (!trimmedDatabaseName || !/^[a-zA-Z0-9_]+$/.test(trimmedDatabaseName)) {
+      setError("Database name may contain only letters, numbers, and underscores.");
+      return;
+    }
+
+    if (!Number.isInteger(parsedPort) || parsedPort < 1024 || parsedPort > 65535) {
+      setError("Port must be a whole number between 1024 and 65535.");
+      return;
+    }
+
+    if (!password) {
+      setError("Enter a root password.");
+      return;
+    }
+
     setLoading(true);
 
     try {
       const database = await window.databaseAPI.create({
-        name,
-        port: Number(port),
+        name: trimmedName,
+        port: parsedPort,
         password,
-        database: databaseName
+        database: trimmedDatabaseName
       });
 
       setDatabases(current => [...current, database]);
       setName("");
       setDatabaseName("");
       setPassword("");
+      setCreateOpen(false);
     } catch (createError) {
       setError(errorMessage(createError, "Failed to create database"));
     } finally {
@@ -341,239 +431,128 @@ function App() {
     }
   }
 
+  const runningCount = databases.filter(database => database.status === "running").length;
+  const stoppedCount = databases.filter(database => database.status === "stopped").length;
+  const attentionCount = databases.filter(database =>
+    database.status === "error" || database.status === "not-found"
+  ).length;
+
   return (
-    <div
-      style={{
-        padding: "40px",
-        fontFamily: "Arial",
-        maxWidth: "1000px",
-        margin: "auto"
-      }}
-    >
-      <h1>Local DB Manager</h1>
-      <p>Manage your local database environments</p>
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-mark"><Icon name="database" size={20} /></div>
+          <div>
+            <strong>Local DB</strong>
+            <span>Manager</span>
+          </div>
+        </div>
 
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "10px",
-          padding: "25px",
-          marginTop: "30px"
-        }}
-      >
-        <h2>Create MySQL Database</h2>
+        <div className="sidebar-label">Workspace</div>
+        <nav className="sidebar-nav" aria-label="Primary navigation">
+          <button className="nav-item active"><Icon name="layers" /> Overview</button>
+          <button className="nav-item" onClick={() => document.getElementById("environments")?.scrollIntoView({ behavior: "smooth" })}><Icon name="server" /> Environments <span className="nav-count">{databases.length}</span></button>
+          <button className="nav-item" onClick={() => document.getElementById("activity")?.scrollIntoView({ behavior: "smooth" })}><Icon name="activity" /> Activity</button>
+        </nav>
 
-        <form
-          onSubmit={event => {
-            event.preventDefault();
-            void createDatabase();
-          }}
-          style={{
-            display: "grid",
-            gap: "15px",
-            maxWidth: "500px"
-          }}
-        >
-          <input
-            placeholder="Environment name"
-            value={name}
-            required
-            onChange={event => setName(event.target.value)}
-          />
-          <input
-            placeholder="Database name"
-            value={databaseName}
-            required
-            onChange={event => setDatabaseName(event.target.value)}
-          />
-          <input
-            type="number"
-            placeholder="Port"
-            value={port}
-            min="1024"
-            max="65535"
-            required
-            onChange={event => setPort(event.target.value)}
-          />
-          <input
-            type="password"
-            placeholder="Root password"
-            value={password}
-            required
-            onChange={event => setPassword(event.target.value)}
-          />
-          <button type="submit" disabled={loading}>
-            {loading ? "Creating..." : "Create Database"}
-          </button>
-        </form>
+        <div className="sidebar-spacer" />
+        <div className="sidebar-card">
+          <span className="sidebar-card-icon"><Icon name="database" /></span>
+          <div>
+            <strong>MySQL workspace</strong>
+            <span>Docker-powered local data</span>
+          </div>
+        </div>
+        <button className="nav-item sidebar-settings"><Icon name="settings" /> Settings</button>
+        <div className="sidebar-footer">v0.1.0 <span>•</span> Local only</div>
+      </aside>
 
-        {error && <p style={{ color: "red" }}>{error}</p>}
-      </div>
+      <main className="main-content">
+        <header className="topbar">
+          <div className="mobile-brand"><div className="brand-mark"><Icon name="database" size={18} /></div><strong>Local DB Manager</strong></div>
+          <div className="breadcrumbs"><span>Workspace</span><Icon name="arrow" size={13} /><strong>Overview</strong></div>
+          <div className="topbar-actions"><span className="connection-pill"><span className="pulse-dot" /> Docker connected</span><button className="icon-button" title="Refresh status" onClick={() => window.location.reload()}><Icon name="refresh" /></button></div>
+        </header>
 
-      <div style={{ marginTop: "30px" }}>
-        <h2>Databases</h2>
-        {actionError && <p style={{ color: "red" }}>{actionError}</p>}
-        {notice && <p style={{ color: "green" }}>{notice}</p>}
+        <div className="content-wrap">
+          <section className="page-header">
+            <div><span className="eyebrow">WORKSPACE</span><h1>Overview</h1><p>Manage your local database environments.</p></div>
+            <button className="primary-button" type="button" onClick={() => { setError(""); setCreateOpen(true); }}><Icon name="plus" /> New environment</button>
+          </section>
 
-        {databases.length === 0 && <p>No databases created yet.</p>}
+          <section className="metric-grid" aria-label="Workspace summary">
+            <div className="metric-card"><div className="metric-icon blue"><Icon name="server" /></div><div><span>Total environments</span><strong>{databases.length}</strong></div><small className="metric-trend">All instances</small></div>
+            <div className="metric-card"><div className="metric-icon green"><Icon name="activity" /></div><div><span>Running now</span><strong>{runningCount}</strong></div><small className="metric-trend positive">Ready to connect</small></div>
+            <div className="metric-card"><div className="metric-icon amber"><Icon name="stop" /></div><div><span>Stopped</span><strong>{stoppedCount}</strong></div><small className="metric-trend">Available to start</small></div>
+            <div className="metric-card"><div className="metric-icon rose"><Icon name="activity" /></div><div><span>Needs attention</span><strong>{attentionCount}</strong></div><small className="metric-trend">Errors or missing</small></div>
+          </section>
 
-        {databases.map(database => {
-          const isBusy = busyId === database.id;
-          const actionsDisabled = busyId !== null || fileAction !== null;
+          <div className="section-heading" id="environments">
+            <div><span className="eyebrow">DATABASES</span><h2>Your environments</h2><p>Manage the local instances that power your projects.</p></div>
+            <button className="secondary-button" type="button" onClick={() => { setError(""); setCreateOpen(true); }}><Icon name="plus" /> New environment</button>
+          </div>
 
-          return (
-            <div
-              key={database.id}
-              style={{
-                border: "1px solid #ddd",
-                borderRadius: "10px",
-                padding: "20px",
-                marginTop: "15px"
-              }}
-            >
-              <h3>{database.name}</h3>
-              <p>
-                {database.engine} {database.version}
-              </p>
-              <p>
-                {database.host}:{database.port}
-              </p>
-              <p>Database: {database.database}</p>
-              <p>
-                Status: <strong>{isBusy ? "Working..." : statusLabel(database.status)}</strong>
-              </p>
+          {actionError && <div className="alert error-alert"><Icon name="activity" /><span>{actionError}</span></div>}
+          {notice && <div className="alert success-alert"><Icon name="arrow" /><span>{notice}</span></div>}
 
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button
-                  onClick={() => void startDatabase(database)}
-                  disabled={actionsDisabled || database.status === "running"}
-                >
-                  Start
-                </button>
-                <button
-                  onClick={() => void stopDatabase(database)}
-                  disabled={actionsDisabled || database.status !== "running"}
-                >
-                  Stop
-                </button>
-                <button
-                  onClick={() => void restartDatabase(database)}
-                  disabled={actionsDisabled || database.status === "not-found"}
-                >
-                  Restart
-                </button>
-                <button
-                  onClick={() => void removeDatabase(database)}
-                  disabled={actionsDisabled}
-                >
-                  Remove Container
-                </button>
-                <button
-                  onClick={() => void deleteDatabase(database)}
-                  disabled={actionsDisabled}
-                >
-                  Delete Permanently
-                </button>
-                <button onClick={() => void showLogs(database)}>
-                  View Logs
-                </button>
-                <button
-                  onClick={() => void backupDatabase(database)}
-                  disabled={actionsDisabled}
-                >
-                  {fileAction === `${database.id}:backup`
-                    ? "Backing up..."
-                    : "Backup"}
-                </button>
-                <button
-                  onClick={() => void restoreDatabase(database)}
-                  disabled={actionsDisabled}
-                >
-                  {fileAction === `${database.id}:restore`
-                    ? "Restoring..."
-                    : "Restore"}
-                </button>
-                <button
-                  onClick={() => void inspectDatabase(database)}
-                  disabled={actionsDisabled}
-                >
-                  Connect & Inspect
-                </button>
-              </div>
+          <section className="database-grid">
+            {databases.length === 0 && <div className="empty-card"><div className="empty-icon"><Icon name="server" size={24} /></div><h3>No environments yet</h3><p>Create a local MySQL environment to get started.</p><button className="secondary-button" type="button" onClick={() => { setError(""); setCreateOpen(true); }}><Icon name="plus" /> New environment</button></div>}
 
-              {logs?.id === database.id && (
-                <pre
-                  style={{
-                    textAlign: "left",
-                    whiteSpace: "pre-wrap",
-                    maxHeight: "240px",
-                    overflow: "auto"
-                  }}
-                >
-                  {logs.text || "No container logs available."}
-                </pre>
-              )}
+            {databases.map(database => {
+              const isBusy = busyId === database.id;
+              const actionsDisabled = busyId !== null || fileAction !== null;
+              const canStart = database.status !== "running" && database.status !== "starting" && database.status !== "stopping";
+              const canStop = database.status === "running" || database.status === "starting" || database.status === "error";
+              return (
+                <article className={`database-card status-${database.status}`} key={database.id}>
+                  <div className="card-topline"><span className={`status-badge ${database.status}`}><span className="status-dot" />{isBusy ? "Working..." : statusLabel(database.status)}</span><button className="more-button" title="Environment options"><span /><span /><span /></button></div>
+                  <div className="database-title"><div className="database-avatar"><Icon name="database" /></div><div><h3>{database.name}</h3><p>MySQL {database.version}</p></div></div>
+                  <div className="connection-details"><div><span>HOST</span><strong>{database.host}</strong></div><div><span>PORT</span><strong>{database.port}</strong></div><div><span>DATABASE</span><strong>{database.database}</strong></div><div><span>CREATED</span><strong>{formatCreatedAt(database.createdAt)}</strong></div></div>
+                  <div className="card-actions primary-actions">
+                    <button className="primary-button small" onClick={() => void inspectDatabase(database)} disabled={actionsDisabled}><Icon name="external" /> Connect & inspect</button>
+                    <button className="secondary-button small icon-only" title="Restart environment" onClick={() => void restartDatabase(database)} disabled={actionsDisabled || database.status === "not-found"}><Icon name="refresh" /></button>
+                  </div>
+                  <div className="card-actions secondary-actions">
+                    <button onClick={() => void startDatabase(database)} disabled={actionsDisabled || !canStart}><Icon name="play" /> Start</button>
+                    <button onClick={() => void stopDatabase(database)} disabled={actionsDisabled || !canStop}><Icon name="stop" /> Stop</button>
+                    <button onClick={() => void showLogs(database)} disabled={actionsDisabled}><Icon name="logs" /> Logs</button>
+                    <button onClick={() => void backupDatabase(database)} disabled={actionsDisabled}><Icon name="backup" />{fileAction === `${database.id}:backup` ? "Backing up" : "Backup"}</button>
+                    <button onClick={() => void restoreDatabase(database)} disabled={actionsDisabled}><Icon name="backup" />{fileAction === `${database.id}:restore` ? "Restoring" : "Restore"}</button>
+                  </div>
+                  <div className="card-danger-actions"><button onClick={() => void removeDatabase(database)} disabled={actionsDisabled}>Remove container</button><button onClick={() => void deleteDatabase(database)} disabled={actionsDisabled}><Icon name="trash" /> Delete permanently</button></div>
 
-              {inspection?.id === database.id && (
-                <div style={{ textAlign: "left" }}>
-                  <h4>Databases</h4>
-                  <p>{inspection.databases.join(", ") || "None"}</p>
-                  <h4>Tables in {database.database}</h4>
-                  {inspection.tables.length === 0 ? (
-                    <p>None</p>
-                  ) : (
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      {inspection.tables.map(table => (
-                        <button
-                          key={table}
-                          onClick={() => void inspectTable(database, table)}
-                        >
-                          {table}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {logs?.id === database.id && <pre className="logs-panel">{logs.text || "No container logs available."}</pre>}
+                  {inspection?.id === database.id && <div className="inspection-panel">
+                    <div className="inspection-header"><div><span className="eyebrow">CONNECTED</span><h4>Database explorer</h4></div><span className="connection-pill compact"><span className="pulse-dot" /> Live</span></div>
+                    <div className="explorer-summary"><div><span>DATABASES</span><strong>{inspection.databases.length}</strong></div><div><span>TABLES</span><strong>{inspection.tables.length}</strong></div><div><span>DEFAULT</span><strong>{database.database}</strong></div></div>
+                    <h5>Tables in {database.database}</h5>
+                    {inspection.tables.length === 0 ? <p className="muted-copy">No tables found in this database.</p> : <div className="table-list">{inspection.tables.map(table => <button className="table-chip" key={table} onClick={() => void inspectTable(database, table)}><Icon name="database" size={14} />{table}<Icon name="arrow" size={12} /></button>)}</div>}
+                    {tableDetails?.id === database.id && <TableDetailsView details={tableDetails.details} exporting={exportingTable === `${database.id}:${tableDetails.details.tableName}`} onExport={() => void exportTable(database, tableDetails.details.tableName)} />}
+                    <div className="query-panel"><div className="query-heading"><div><span className="eyebrow">QUERY CONSOLE</span><h4>Run SQL</h4></div><span className="sql-badge">MySQL</span></div><textarea value={query} onChange={event => setQuery(event.target.value)} spellCheck={false} /><button className="primary-button small" onClick={() => void runQuery(database)} disabled={queryLoadingId !== null || actionsDisabled}><Icon name="play" />{queryLoadingId === database.id ? "Running..." : "Run query"}</button>{queryResult?.id === database.id && <QueryResultView result={queryResult.result} />}</div>
+                  </div>}
+                </article>
+              );
+            })}
+          </section>
 
-                  {tableDetails?.id === database.id && (
-                    <TableDetailsView
-                      details={tableDetails.details}
-                      exporting={
-                        exportingTable ===
-                        `${database.id}:${tableDetails.details.tableName}`
-                      }
-                      onExport={() =>
-                        void exportTable(
-                          database,
-                          tableDetails.details.tableName
-                        )
-                      }
-                    />
-                  )}
+          <section className="create-prompt"><div><span className="eyebrow">LOCAL WORKSPACE</span><h2>Need another environment?</h2><p>Provision a persistent MySQL 8.4 container with a few details.</p></div><button className="secondary-button" type="button" onClick={() => { setError(""); setCreateOpen(true); }}><Icon name="plus" /> Create environment</button></section>
+          <div id="activity" className="activity-footer"><span><span className="pulse-dot" /> Status refreshes automatically every 5 seconds</span><span>Local DB Manager</span></div>
+        </div>
+      </main>
 
-                  <h4>SQL Query</h4>
-                  <textarea
-                    rows={6}
-                    value={query}
-                    onChange={event => setQuery(event.target.value)}
-                    style={{ width: "100%", boxSizing: "border-box" }}
-                    spellCheck={false}
-                  />
-                  <button
-                    onClick={() => void runQuery(database)}
-                    disabled={queryLoadingId !== null || actionsDisabled}
-                  >
-                    {queryLoadingId === database.id ? "Running..." : "Run Query"}
-                  </button>
-
-                  {queryResult?.id === database.id && (
-                    <QueryResultView result={queryResult.result} />
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {createOpen && <div className="modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !loading) setCreateOpen(false); }}>
+        <section className="create-dialog" role="dialog" aria-modal="true" aria-labelledby="create-dialog-title" onMouseDown={event => event.stopPropagation()}>
+          <div className="dialog-header"><div><span className="eyebrow">NEW ENVIRONMENT</span><h2 id="create-dialog-title">Create environment</h2><p>Configure a local MySQL container.</p></div><button className="dialog-close" type="button" aria-label="Close dialog" onClick={() => setCreateOpen(false)} disabled={loading}>×</button></div>
+          <form className="create-form" onSubmit={event => { event.preventDefault(); void createDatabase(); }} noValidate>
+            <div className="form-field"><label htmlFor="environment-name">Environment name</label><input id="environment-name" data-testid="environment-name" type="text" placeholder="Payments API" value={name} autoComplete="off" onChange={event => setName(event.target.value)} /></div>
+            <div className="form-field"><label htmlFor="database-name">Database name</label><input id="database-name" data-testid="database-name" type="text" placeholder="payments_dev" value={databaseName} autoComplete="off" onChange={event => setDatabaseName(event.target.value)} /></div>
+            <div className="form-row"><div className="form-field"><label htmlFor="database-port">Port</label><input id="database-port" data-testid="database-port" type="number" inputMode="numeric" placeholder="3307" value={port} min="1024" max="65535" onChange={event => setPort(event.target.value)} /></div><div className="form-field"><label htmlFor="root-password">Root password</label><input id="root-password" data-testid="root-password" type="password" placeholder="Use a secure password" value={password} autoComplete="new-password" onChange={event => setPassword(event.target.value)} /></div></div>
+            <p className="field-help"><Icon name="database" size={13} /> Data persists in a named Docker volume.</p>
+            {error && <div className="form-error" role="alert"><Icon name="activity" />{error}</div>}
+            <div className="dialog-actions"><button className="secondary-button" type="button" onClick={() => setCreateOpen(false)} disabled={loading}>Cancel</button><button className="primary-button" type="submit" disabled={loading}><Icon name="plus" />{loading ? "Creating..." : "Create environment"}</button></div>
+          </form>
+        </section>
+      </div>}
     </div>
   );
 }

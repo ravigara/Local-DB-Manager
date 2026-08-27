@@ -23,6 +23,49 @@ export class DockerManager {
     database: string
   ): Promise<string> {
 
+    return this.runMySQLContainer(
+      containerName,
+      volumeName,
+      port,
+      rootPassword,
+      database,
+      true
+    );
+  }
+
+  async recreateMySQLContainer(
+    containerName: string,
+    volumeName: string,
+    port: number,
+    rootPassword: string,
+    database: string
+  ): Promise<string> {
+
+    if (!(await this.hasVolume(volumeName))) {
+      throw new Error(
+        `Database volume "${volumeName}" was not found. Delete this environment and create it again.`
+      );
+    }
+
+    return this.runMySQLContainer(
+      containerName,
+      volumeName,
+      port,
+      rootPassword,
+      database,
+      false
+    );
+  }
+
+  private async runMySQLContainer(
+    containerName: string,
+    volumeName: string,
+    port: number,
+    rootPassword: string,
+    database: string,
+    removeVolumeOnFailure: boolean
+  ): Promise<string> {
+
     const args = [
       "run",
       "-d",
@@ -69,7 +112,9 @@ export class DockerManager {
       return stdout.trim();
     } catch (error) {
       await this.tryRemoveContainer(containerName);
-      await this.tryRemoveVolume(volumeName);
+      if (removeVolumeOnFailure) {
+        await this.tryRemoveVolume(volumeName);
+      }
       throw error;
     }
   }
@@ -77,6 +122,21 @@ export class DockerManager {
   async stopContainer(
     containerName: string
   ): Promise<void> {
+
+    const status = await this.getContainerStatus(containerName);
+
+    if (status === "not-found") {
+      throw new Error(`Docker container "${containerName}" was not found`);
+    }
+
+    if (
+      status === "exited" ||
+      status === "dead" ||
+      status === "stopped" ||
+      status === "created"
+    ) {
+      return;
+    }
 
     await execFileAsync(
       "docker",
@@ -87,6 +147,21 @@ export class DockerManager {
   async startContainer(
     containerName: string
   ): Promise<void> {
+
+    const status = await this.getContainerStatus(containerName);
+
+    if (status === "not-found") {
+      throw new Error(`Docker container "${containerName}" was not found`);
+    }
+
+    if (
+      status === "running" ||
+      status === "healthy" ||
+      status === "starting"
+    ) {
+      await this.waitForReady(containerName);
+      return;
+    }
 
     await execFileAsync(
       "docker",
@@ -99,6 +174,12 @@ export class DockerManager {
   async restartContainer(
     containerName: string
   ): Promise<void> {
+
+    const status = await this.getContainerStatus(containerName);
+
+    if (status === "not-found") {
+      throw new Error(`Docker container "${containerName}" was not found`);
+    }
 
     await execFileAsync(
       "docker",

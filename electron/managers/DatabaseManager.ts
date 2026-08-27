@@ -2,7 +2,8 @@ import { randomUUID } from "crypto";
 
 import {
   DatabaseConfig,
-  DatabaseStatus
+  DatabaseStatus,
+  StoredDatabase
 } from "../types/database";
 
 import {
@@ -13,6 +14,10 @@ export class DatabaseManager {
 
   private docker =
     new DockerManager();
+
+  async isDockerRunning(): Promise<boolean> {
+    return this.docker.isDockerRunning();
+  }
 
   async createMySQL(
     name: string,
@@ -73,11 +78,27 @@ export class DatabaseManager {
   }
 
   async start(
-    containerName: string
+    database: StoredDatabase,
+    password: string
   ) {
 
+    const status = await this.docker.getContainerStatus(
+      database.containerName
+    );
+
+    if (status === "not-found") {
+      await this.docker.recreateMySQLContainer(
+        database.containerName,
+        database.volumeName,
+        database.port,
+        password,
+        database.database
+      );
+      return;
+    }
+
     return this.docker.startContainer(
-      containerName
+      database.containerName
     );
   }
 
@@ -162,7 +183,8 @@ export class DatabaseManager {
       status === "starting" ||
       status === "exited" ||
       status === "dead" ||
-      status === "stopped"
+      status === "stopped" ||
+      status === "created"
     ) {
       return status === "starting" ? "starting" : "stopped";
     }

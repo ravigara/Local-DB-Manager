@@ -41,6 +41,12 @@ export class DatabaseService {
       throw new Error("Invalid database configuration");
     }
 
+    if (!(await this.manager.isDockerRunning())) {
+      throw new Error(
+        "Docker Desktop is not running. Start Docker Desktop and try again."
+      );
+    }
+
     const name = config.name.trim();
     const databaseName = config.database.trim();
 
@@ -171,8 +177,16 @@ if (existingName) {
     const database =
       this.getStoredDatabase(id);
 
+    const password =
+      this.database.getPassword(database.id);
+
+    if (password === undefined) {
+      throw new Error("Database credentials are unavailable");
+    }
+
     return this.manager.start(
-      database.containerName
+      database,
+      password
     );
   }
 
@@ -201,9 +215,11 @@ if (existingName) {
     const database =
       this.getStoredDatabase(id);
 
-    return this.manager.status(
-      database.containerName
-    );
+    try {
+      return await this.manager.status(database.containerName);
+    } catch {
+      return "error" as const;
+    }
   }
 
   async getLogs(id: unknown): Promise<string> {
