@@ -120,10 +120,6 @@ Before a release, manually verify the complete acceptance flow with Docker Deskt
 6. Remove the container, start it again, and verify that the data remains.
 7. Delete the disposable test environment permanently and confirm its Docker volume is gone.
 
-## Design direction
-
-The UI follows the repository’s [Codex UI redesign brief](Codex%20UI%20Redesign%20Prompt.md): compact information density, a functional sidebar, restrained borders and controls, technical metadata, inline states, and first-class light/dark theme tokens. It is intentionally designed as a desktop developer utility rather than a marketing dashboard.
-
 ## Roadmap
 
 - PostgreSQL and MariaDB support.
