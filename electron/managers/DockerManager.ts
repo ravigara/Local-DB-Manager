@@ -100,6 +100,46 @@ export class DockerManager {
     );
   }
 
+  async createMariaDBContainer(
+    containerName: string,
+    volumeName: string,
+    port: number,
+    rootPassword: string,
+    database: string
+  ): Promise<string> {
+    return this.runMariaDBContainer(
+      containerName,
+      volumeName,
+      port,
+      rootPassword,
+      database,
+      true
+    );
+  }
+
+  async recreateMariaDBContainer(
+    containerName: string,
+    volumeName: string,
+    port: number,
+    rootPassword: string,
+    database: string
+  ): Promise<string> {
+    if (!(await this.hasVolume(volumeName))) {
+      throw new Error(
+        `Database volume "${volumeName}" was not found. Delete this environment and create it again.`
+      );
+    }
+
+    return this.runMariaDBContainer(
+      containerName,
+      volumeName,
+      port,
+      rootPassword,
+      database,
+      false
+    );
+  }
+
   private async runMySQLContainer(
     containerName: string,
     volumeName: string,
@@ -186,6 +226,49 @@ export class DockerManager {
       "--health-start-period",
       "5s",
       getDatabaseEngineDefinition("postgresql").image
+    ];
+
+    return this.runContainer(
+      args,
+      containerName,
+      volumeName,
+      removeVolumeOnFailure
+    );
+  }
+
+  private async runMariaDBContainer(
+    containerName: string,
+    volumeName: string,
+    port: number,
+    rootPassword: string,
+    database: string,
+    removeVolumeOnFailure: boolean
+  ): Promise<string> {
+    const definition = getDatabaseEngineDefinition("mariadb");
+    const args = [
+      "run",
+      "-d",
+      "--name",
+      containerName,
+      "-e",
+      `MARIADB_ROOT_PASSWORD=${rootPassword}`,
+      "-e",
+      `MARIADB_DATABASE=${database}`,
+      "-p",
+      `${port}:${definition.internalPort}`,
+      "-v",
+      `${volumeName}:/var/lib/mysql`,
+      "--health-cmd",
+      "mariadb-admin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD || exit 1",
+      "--health-interval",
+      "2s",
+      "--health-timeout",
+      "5s",
+      "--health-retries",
+      "15",
+      "--health-start-period",
+      "5s",
+      definition.image
     ];
 
     return this.runContainer(
@@ -444,8 +527,8 @@ async removeVolume(
   ): Promise<void> {
 
     const definition = getDatabaseEngineDefinition(engine);
-    const command = engine === "mysql" ? [
-      "mysqldump",
+    const command = engine === "mysql" || engine === "mariadb" ? [
+      engine === "mariadb" ? "mariadb-dump" : "mysqldump",
       "--single-transaction",
       "--routines",
       "--events",
@@ -459,7 +542,7 @@ async removeVolume(
       "-d",
       databaseName
     ];
-    const passwordVariable = engine === "mysql" ? "MYSQL_PWD" : "PGPASSWORD";
+    const passwordVariable = engine === "mysql" || engine === "mariadb" ? "MYSQL_PWD" : "PGPASSWORD";
     const { stdout } = await execFileAsync(
       "docker",
       ["exec", "-e", `${passwordVariable}=${rootPassword}`, containerName, ...command],
@@ -487,9 +570,9 @@ async removeVolume(
 
     await new Promise<void>((resolve, reject) => {
       const definition = getDatabaseEngineDefinition(engine);
-      const passwordVariable = engine === "mysql" ? "MYSQL_PWD" : "PGPASSWORD";
-      const command = engine === "mysql" ? [
-        "mysql",
+      const passwordVariable = engine === "mysql" || engine === "mariadb" ? "MYSQL_PWD" : "PGPASSWORD";
+      const command = engine === "mysql" || engine === "mariadb" ? [
+        engine === "mariadb" ? "mariadb" : "mysql",
         `-u${definition.username}`,
         databaseName
       ] : [

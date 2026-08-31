@@ -33,19 +33,19 @@ async function getFreePort(): Promise<number> {
 }
 
 async function dockerQuery(
-  engine: "mysql" | "postgresql",
+  engine: "mysql" | "postgresql" | "mariadb",
   containerName: string,
   password: string,
   sql: string
 ): Promise<string> {
-  const args = engine === "mysql"
-    ? ["exec", "-e", `MYSQL_PWD=${password}`, containerName, "mysql", "-uroot", "smoke", "-N", "-e", sql]
+  const args = engine === "mysql" || engine === "mariadb"
+    ? ["exec", "-e", `MYSQL_PWD=${password}`, containerName, engine === "mariadb" ? "mariadb" : "mysql", "-uroot", "smoke", "-N", "-e", sql]
     : ["exec", "-e", `PGPASSWORD=${password}`, containerName, "psql", "-U", "postgres", "-d", "smoke", "-At", "-c", sql];
   const { stdout } = await execFileAsync("docker", args);
   return stdout.trim();
 }
 
-for (const engine of ["mysql", "postgresql"] as const) {
+for (const engine of ["mysql", "postgresql", "mariadb"] as const) {
   test(`${engine} Docker lifecycle preserves volume data`, { timeout: 180_000 }, async t => {
     const manager = new DockerManager();
 
@@ -65,11 +65,11 @@ for (const engine of ["mysql", "postgresql"] as const) {
       id: containerName,
       name: containerName,
       engine,
-      version: engine === "mysql" ? "8.4" : "17",
+      version: engine === "mysql" ? "8.4" : engine === "postgresql" ? "17" : "11.4",
       host: "127.0.0.1",
       port,
       database: "smoke",
-      username: engine === "mysql" ? "root" : "postgres",
+      username: engine === "postgresql" ? "postgres" : "root",
       containerName,
       volumeName,
       createdAt: new Date().toISOString()
@@ -82,8 +82,10 @@ for (const engine of ["mysql", "postgresql"] as const) {
     try {
       if (engine === "mysql") {
         await manager.createMySQLContainer(containerName, volumeName, port, password, "smoke");
-      } else {
+      } else if (engine === "postgresql") {
         await manager.createPostgreSQLContainer(containerName, volumeName, port, password, "smoke");
+      } else {
+        await manager.createMariaDBContainer(containerName, volumeName, port, password, "smoke");
       }
 
       assert.ok(["healthy", "running"].includes(await manager.getContainerStatus(containerName)));
@@ -110,8 +112,10 @@ for (const engine of ["mysql", "postgresql"] as const) {
       assert.equal(await manager.getContainerStatus(containerName), "not-found");
       if (engine === "mysql") {
         await manager.recreateMySQLContainer(containerName, volumeName, port, password, "smoke");
-      } else {
+      } else if (engine === "postgresql") {
         await manager.recreatePostgreSQLContainer(containerName, volumeName, port, password, "smoke");
+      } else {
+        await manager.recreateMariaDBContainer(containerName, volumeName, port, password, "smoke");
       }
       assert.equal(await dockerQuery(engine, containerName, password, "SELECT note FROM verification WHERE id = 1;"), "persisted");
     } finally {

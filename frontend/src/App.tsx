@@ -34,11 +34,27 @@ function formatActivityAt(value: string): string {
 }
 
 function defaultPortForEngine(engine: DatabaseEngine): string {
-  return engine === "mysql" ? "3307" : "5433";
+  if (engine === "mysql") {
+    return "3307";
+  }
+
+  if (engine === "postgresql") {
+    return "5433";
+  }
+
+  return "3308";
 }
 
 function engineLabel(engine: DatabaseEngine): string {
-  return engine === "mysql" ? "MySQL" : "PostgreSQL";
+  if (engine === "mysql") {
+    return "MySQL";
+  }
+
+  if (engine === "postgresql") {
+    return "PostgreSQL";
+  }
+
+  return "MariaDB";
 }
 
 type IconName =
@@ -615,7 +631,7 @@ function App() {
             })}
           </section>
 
-          <section className="create-prompt"><div><span className="eyebrow">LOCAL WORKSPACE</span><h2>Need another environment?</h2><p>Provision a persistent MySQL or PostgreSQL container with a few details.</p></div><button className="secondary-button" type="button" onClick={() => { setError(""); setCreateOpen(true); }}><Icon name="plus" /> Create environment</button></section>
+          <section className="create-prompt"><div><span className="eyebrow">LOCAL WORKSPACE</span><h2>Need another environment?</h2><p>Provision a persistent MySQL, PostgreSQL, or MariaDB container with a few details.</p></div><button className="secondary-button" type="button" onClick={() => { setError(""); setCreateOpen(true); }}><Icon name="plus" /> Create environment</button></section>
           <section id="activity" className="activity-panel">
             <div className="section-heading"><div><span className="eyebrow">ACTIVITY</span><h2>Recent workspace activity</h2><p>Actions from this session appear here.</p></div><span className="section-count">{activity.length} event{activity.length === 1 ? "" : "s"}</span></div>
             {activity.length === 0 ? <div className="activity-empty"><Icon name="activity" size={15} /> No actions recorded yet.</div> : <ul className="activity-list">{activity.map(item => <li key={item.id}><span className="activity-dot" /><span>{item.message}</span><time dateTime={item.createdAt}>{formatActivityAt(item.createdAt)}</time></li>)}</ul>}
@@ -626,13 +642,13 @@ function App() {
 
       {createOpen && <div className="modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !loading) setCreateOpen(false); }}>
         <section className="create-dialog" role="dialog" aria-modal="true" aria-labelledby="create-dialog-title" onMouseDown={event => event.stopPropagation()}>
-           <div className="dialog-header"><div><span className="eyebrow">NEW ENVIRONMENT</span><h2 id="create-dialog-title">Create environment</h2><p>Configure a local MySQL or PostgreSQL container.</p></div><button className="dialog-close" type="button" aria-label="Close dialog" onClick={() => setCreateOpen(false)} disabled={loading}>×</button></div>
+           <div className="dialog-header"><div><span className="eyebrow">NEW ENVIRONMENT</span><h2 id="create-dialog-title">Create environment</h2><p>Configure a local MySQL, PostgreSQL, or MariaDB container.</p></div><button className="dialog-close" type="button" aria-label="Close dialog" onClick={() => setCreateOpen(false)} disabled={loading}>×</button></div>
            <form className="create-form" onSubmit={event => { event.preventDefault(); void createDatabase(); }} noValidate>
-             <div className="form-field"><label htmlFor="database-engine">Database engine</label><select id="database-engine" value={engine} onChange={event => { const nextEngine = event.target.value as DatabaseEngine; setEngine(nextEngine); setPort(defaultPortForEngine(nextEngine)); }}><option value="mysql">MySQL 8.4</option><option value="postgresql">PostgreSQL 17</option></select></div>
+             <div className="form-field"><label htmlFor="database-engine">Database engine</label><select id="database-engine" value={engine} onChange={event => { const nextEngine = event.target.value as DatabaseEngine; setEngine(nextEngine); setPort(defaultPortForEngine(nextEngine)); }}><option value="mysql">MySQL 8.4</option><option value="postgresql">PostgreSQL 17</option><option value="mariadb">MariaDB 11.4</option></select></div>
              <div className="form-field"><label htmlFor="environment-name">Environment name</label><input id="environment-name" data-testid="environment-name" type="text" placeholder="Payments API" value={name} autoComplete="off" onChange={event => setName(event.target.value)} /></div>
             <div className="form-field"><label htmlFor="database-name">Database name</label><input id="database-name" data-testid="database-name" type="text" placeholder="payments_dev" value={databaseName} autoComplete="off" onChange={event => setDatabaseName(event.target.value)} /></div>
              <div className="form-row"><div className="form-field"><label htmlFor="database-port">Port</label><input id="database-port" data-testid="database-port" type="number" inputMode="numeric" placeholder={defaultPortForEngine(engine)} value={port} min="1024" max="65535" onChange={event => setPort(event.target.value)} /></div><div className="form-field"><label htmlFor="root-password">Admin password</label><input id="root-password" data-testid="root-password" type="password" placeholder="Use a secure password" value={password} autoComplete="new-password" onChange={event => setPassword(event.target.value)} /></div></div>
-             <p className="field-help"><Icon name="database" size={13} /> Data persists in a named Docker volume. PostgreSQL uses the public schema.</p>
+             <p className="field-help"><Icon name="database" size={13} /> Data persists in a named Docker volume. PostgreSQL uses the public schema; MySQL and MariaDB use their default schema.</p>
             {error && <div className="form-error" role="alert"><Icon name="activity" />{error}</div>}
             <div className="dialog-actions"><button className="secondary-button" type="button" onClick={() => setCreateOpen(false)} disabled={loading}>Cancel</button><button className="primary-button" type="submit" disabled={loading}><Icon name="plus" />{loading ? "Creating..." : "Create environment"}</button></div>
           </form>

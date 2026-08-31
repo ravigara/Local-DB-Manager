@@ -6,7 +6,7 @@ Local DB Manager is a focused Windows desktop workspace for running and inspecti
 
 ## What it does
 
-- Create MySQL 8.4 or PostgreSQL 17 environments with a named persistent Docker volume.
+- Create MySQL 8.4, PostgreSQL 17, or MariaDB 11.4 environments with a named persistent Docker volume.
 - Start, stop, restart, inspect, and monitor container status.
 - Recreate a removed container while retaining its data volume.
 - Connect to a running instance and browse databases and tables.
@@ -19,7 +19,7 @@ Local DB Manager is a focused Windows desktop workspace for running and inspecti
 
 ## Current status
 
-The MySQL and PostgreSQL MVPs are implemented end to end. The primary supported platform is Windows, and Docker Desktop must be running for database lifecycle, connection, backup, and restore operations. MariaDB, additional engine versions, and reusable templates are planned for future iterations.
+The MySQL, PostgreSQL, and MariaDB MVPs are implemented end to end. The primary supported platform is Windows, and Docker Desktop must be running for database lifecycle, connection, backup, and restore operations. Additional engine versions and reusable templates are planned for future iterations.
 
 ## Requirements
 
@@ -44,11 +44,11 @@ npm.cmd start
 1. Start Docker Desktop.
 2. Launch the app with `npm.cmd start`.
 3. Select **New environment**.
-4. Choose MySQL 8.4 or PostgreSQL 17, then enter an environment name, database name, unused host port, and admin password.
+4. Choose MySQL 8.4, PostgreSQL 17, or MariaDB 11.4, then enter an environment name, database name, unused host port, and admin password.
 5. Select **Create environment** and wait for the status to become **Running**.
 6. Select **Connect & inspect** to browse the instance or run SQL.
 
-The database name accepts letters, numbers, and underscores. Host ports must be whole numbers from `1024` through `65535`; the defaults are `3307` for MySQL and `5433` for PostgreSQL. The form validates these values inline before asking the Electron process to create the container.
+The database name accepts letters, numbers, and underscores. Host ports must be whole numbers from `1024` through `65535`; the defaults are `3307` for MySQL, `5433` for PostgreSQL, and `3308` for MariaDB. The form validates these values inline before asking the Electron process to create the container.
 
 ## Development commands
 
@@ -90,7 +90,7 @@ Electron main process
         │
         ├── SQLite application metadata
         ├── Docker container and volume lifecycle
-        └── MySQL/PostgreSQL connections, queries, CSV, backup, restore
+        └── MySQL/PostgreSQL/MariaDB connections, queries, CSV, backup, restore
 ```
 
 The renderer does not receive Node.js access. Electron keeps `contextIsolation` enabled and `nodeIntegration` disabled, while privileged filesystem, Docker, and database operations remain in the main process.
@@ -111,7 +111,7 @@ The current build has been checked with:
 - Vite production frontend build.
 - Frontend ESLint.
 - Seven automated Electron-side unit tests covering engine compatibility, input validation, Docker status normalization, and CSV escaping.
-- Disposable Docker integration tests for both MySQL and PostgreSQL covering readiness, stop/start, container recreation, direct connections, table inspection, CSV export, backup/restore, and volume data persistence (`npm.cmd run test:docker`).
+- Disposable Docker integration tests for MySQL, PostgreSQL, and MariaDB covering readiness, stop/start, container recreation, direct connections, table inspection, CSV export, backup/restore, and volume data persistence (`npm.cmd run test:docker`).
 - Exact `npm.cmd start` Electron startup and renderer-load verification.
 - Actual rendered form smoke test covering all four create fields: environment name, database name, port, and root password.
 - Docker lifecycle smoke test covering MySQL readiness, stop/start/restart, backup/restore, and retained-volume container recreation.
@@ -129,7 +129,6 @@ Before a release, manually verify the complete acceptance flow with Docker Deskt
 
 ## Roadmap
 
-- MariaDB support.
 - Multiple engine versions and reusable environment templates.
 - Improved activity history and resource usage visibility.
 - Environment details view with connection information and logs.

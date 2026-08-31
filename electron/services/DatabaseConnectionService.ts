@@ -53,7 +53,7 @@ export class DatabaseConnectionService {
 
     try {
       const result = await connection.query(
-        record.engine === "mysql"
+        record.engine === "mysql" || record.engine === "mariadb"
           ? "SHOW DATABASES"
           : "SELECT datname AS \"Database\" FROM pg_database WHERE datistemplate = false ORDER BY datname",
         []
@@ -73,14 +73,14 @@ export class DatabaseConnectionService {
 
     try {
       const result = await connection.query(
-        record.engine === "mysql"
+        record.engine === "mysql" || record.engine === "mariadb"
           ? "SHOW TABLES"
           : "SELECT table_name AS \"tableName\" FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name",
         []
       );
 
       return result.rows
-        .map(row => record.engine === "mysql"
+        .map(row => record.engine === "mysql" || record.engine === "mariadb"
           ? String(row[`Tables_in_${record.database}`] ?? "")
           : String(row.tableName ?? row.table_name ?? ""))
         .filter(Boolean);
@@ -132,7 +132,7 @@ export class DatabaseConnectionService {
     const connection = await this.connect(id);
 
     try {
-      const columnResult = record.engine === "mysql"
+      const columnResult = record.engine === "mysql" || record.engine === "mariadb"
         ? await connection.query(
           `SHOW COLUMNS FROM ${this.quoteTable(record.engine, table)}`,
           []
@@ -146,7 +146,7 @@ export class DatabaseConnectionService {
         []
       );
 
-      const columns = record.engine === "mysql"
+      const columns = record.engine === "mysql" || record.engine === "mariadb"
         ? columnResult.rows.map(row => ({
           name: String(row.Field ?? ""),
           type: String(row.Type ?? ""),
@@ -229,7 +229,7 @@ export class DatabaseConnectionService {
       );
     }
 
-    if (record.engine === "mysql") {
+    if (record.engine === "mysql" || record.engine === "mariadb") {
       const connection = await mysql.createConnection({
         host: record.host,
         port: record.port,
@@ -308,7 +308,7 @@ export class DatabaseConnectionService {
   }
 
   private quoteTable(engine: DatabaseEngine, table: string): string {
-    if (engine === "mysql") {
+    if (engine === "mysql" || engine === "mariadb") {
       return `\`${table}\``;
     }
 

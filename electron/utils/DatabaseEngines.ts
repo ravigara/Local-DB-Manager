@@ -28,6 +28,15 @@ const definitions: Record<DatabaseEngine, DatabaseEngineDefinition> = {
     defaultPort: 5433,
     internalPort: 5432,
     username: "postgres"
+  },
+  mariadb: {
+    engine: "mariadb",
+    label: "MariaDB",
+    version: "11.4",
+    image: "mariadb:11.4",
+    defaultPort: 3308,
+    internalPort: 3306,
+    username: "root"
   }
 };
 
@@ -36,7 +45,7 @@ export function parseDatabaseEngine(value: unknown): DatabaseEngine {
     return "mysql";
   }
 
-  if (value === "mysql" || value === "postgresql") {
+  if (value === "mysql" || value === "postgresql" || value === "mariadb") {
     return value;
   }
 

@@ -1,4 +1,4 @@
-export type DatabaseEngine = "mysql" | "postgresql";
+export type DatabaseEngine = "mysql" | "postgresql" | "mariadb";
 
 export type DatabaseStatus =
   | "running"

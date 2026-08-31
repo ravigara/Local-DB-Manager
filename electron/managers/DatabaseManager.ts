@@ -56,8 +56,16 @@ export class DatabaseManager {
         password,
         database
       );
-    } else {
+    } else if (engine === "postgresql") {
       await this.docker.createPostgreSQLContainer(
+        containerName,
+        volumeName,
+        port,
+        password,
+        database
+      );
+    } else {
+      await this.docker.createMariaDBContainer(
         containerName,
         volumeName,
         port,
@@ -118,8 +126,16 @@ export class DatabaseManager {
           password,
           database.database
         );
-      } else {
+      } else if (database.engine === "postgresql") {
         await this.docker.recreatePostgreSQLContainer(
+          database.containerName,
+          database.volumeName,
+          database.port,
+          password,
+          database.database
+        );
+      } else {
+        await this.docker.recreateMariaDBContainer(
           database.containerName,
           database.volumeName,
           database.port,

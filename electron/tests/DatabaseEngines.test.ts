@@ -16,15 +16,17 @@ test("keeps legacy engine requests compatible", () => {
 test("accepts supported engines and rejects unknown engines", () => {
   assert.equal(parseDatabaseEngine("mysql"), "mysql");
   assert.equal(parseDatabaseEngine("postgresql"), "postgresql");
+  assert.equal(parseDatabaseEngine("mariadb"), "mariadb");
   assert.throws(
-    () => parseDatabaseEngine("mariadb"),
+    () => parseDatabaseEngine("sqlite"),
     /Unsupported database engine/
   );
 });
 
-test("defines the container contract for both engines", () => {
+test("defines the container contract for all supported engines", () => {
   const mysql = getDatabaseEngineDefinition("mysql");
   const postgresql = getDatabaseEngineDefinition("postgresql");
+  const mariadb = getDatabaseEngineDefinition("mariadb");
 
   assert.deepEqual(
     {
@@ -59,7 +61,23 @@ test("defines the container contract for both engines", () => {
     }
   );
   assert.deepEqual(
+    {
+      image: mariadb.image,
+      version: mariadb.version,
+      defaultPort: mariadb.defaultPort,
+      internalPort: mariadb.internalPort,
+      username: mariadb.username
+    },
+    {
+      image: "mariadb:11.4",
+      version: "11.4",
+      defaultPort: 3308,
+      internalPort: 3306,
+      username: "root"
+    }
+  );
+  assert.deepEqual(
     listDatabaseEngineDefinitions().map(definition => definition.engine),
-    ["mysql", "postgresql"]
+    ["mysql", "postgresql", "mariadb"]
   );
 });
