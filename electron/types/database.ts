@@ -1,4 +1,4 @@
-export type DatabaseEngine = "mysql";
+export type DatabaseEngine = "mysql" | "postgresql";
 
 export type DatabaseStatus =
   | "running"
@@ -10,6 +10,7 @@ export type DatabaseStatus =
   | "unknown";
 
 export interface CreateDatabaseRequest {
+  engine?: DatabaseEngine;
   name: string;
   port: number;
   password: string;

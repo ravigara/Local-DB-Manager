@@ -7,6 +7,8 @@
     "build": "npm run build:electron && npm run build:frontend",
     "build:electron": "tsc -p electron/tsconfig.json",
     "build:frontend": "npm --prefix frontend run build",
+    "test": "npm run build:electron && node --test dist-electron/tests/Database*.test.js",
+    "test:docker": "npm run build:electron && node --test dist-electron/tests/DockerManager.integration.test.js",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:electron": "set LOCAL_DB_MANAGER_DEV_URL=http://localhost:5173&& npm run build:electron && electron .",
     "start": "npm run build && electron .",
@@ -14,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.5",
     "electron": "^44.0.0",
     "electron-builder": "^26.0.0",
     "typescript": "^5.0.0"
@@ -35,6 +38,7 @@
     }
   },
   "dependencies": {
-    "mysql2": "^3.24.2"
+    "mysql2": "^3.24.2",
+    "pg": "^8.16.3"
   }
 }

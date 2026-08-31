@@ -32,6 +32,12 @@ contextBridge.exposeInMainWorld(
       );
     },
 
+    dockerStatus: (): Promise<boolean> => {
+      return ipcRenderer.invoke(
+        "database:docker-status"
+      );
+    },
+
     start: (
       id: string
     ): Promise<void> => {

@@ -24,6 +24,16 @@ import {
   isPortAvailable
 } from "../utils/PortChecker";
 
+import {
+  validateDatabaseName,
+  validateEnvironmentName,
+  validatePort
+} from "../utils/DatabaseValidation";
+
+import {
+  parseDatabaseEngine
+} from "../utils/DatabaseEngines";
+
 export class DatabaseService {
 
   private manager =
@@ -47,14 +57,9 @@ export class DatabaseService {
       );
     }
 
-    const name = config.name.trim();
-    const databaseName = config.database.trim();
-
-    if (!name) {
-      throw new Error(
-        "Database name is required"
-      );
-    }
+    const name = validateEnvironmentName(config.name);
+    const databaseName = validateDatabaseName(config.database);
+    const engine = parseDatabaseEngine(config.engine);
     const existingName =
   this.database
     .getAll()
@@ -70,33 +75,13 @@ if (existingName) {
   );
 }
 
-    if (!databaseName) {
-      throw new Error(
-        "Database name is required"
-      );
-    }
-
-    if (!/^[A-Za-z0-9_$-]{1,64}$/.test(databaseName)) {
-      throw new Error(
-        "Database name may contain only letters, numbers, _, $, and -"
-      );
-    }
-
     if (!config.password) {
       throw new Error(
         "Password is required"
       );
     }
 
-    if (
-      !Number.isInteger(config.port) ||
-      config.port < 1024 ||
-      config.port > 65535
-    ) {
-      throw new Error(
-        "Port must be between 1024 and 65535"
-      );
-    }
+    validatePort(config.port);
     const portAvailable =
       await isPortAvailable(
         config.port
@@ -122,7 +107,8 @@ if (existingName) {
       );
     }
 
-    const database = await this.manager.createMySQL(
+    const database = await this.manager.create(
+      engine,
       name,
       config.port,
       config.password,
@@ -170,6 +156,10 @@ if (existingName) {
   getDatabases() {
 
     return this.database.getAll();
+  }
+
+  async isDockerRunning(): Promise<boolean> {
+    return this.manager.isDockerRunning();
   }
 
   async start(id: unknown) {
@@ -287,6 +277,7 @@ if (existingName) {
 
     await this.requireRunning(database.containerName);
     await this.manager.backupDatabase(
+      database.engine,
       database.containerName,
       database.database,
       password,
@@ -314,6 +305,7 @@ if (existingName) {
 
     await this.requireRunning(database.containerName);
     await this.manager.restoreDatabase(
+      database.engine,
       database.containerName,
       database.database,
       password,

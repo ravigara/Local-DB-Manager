@@ -311,6 +311,11 @@ function registerIpcHandlers(databaseService: DatabaseService) {
   );
 
   ipcMain.handle(
+    "database:docker-status",
+    async () => databaseService.isDockerRunning()
+  );
+
+  ipcMain.handle(
     "database:remove",
     async (_, id: unknown) => databaseService.removeEnvironment(id)
   );

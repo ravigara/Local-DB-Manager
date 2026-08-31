@@ -23,6 +23,8 @@ declare global {
 
       list: () => Promise<StoredDatabase[]>;
 
+      dockerStatus: () => Promise<boolean>;
+
       start: (
         id: string
       ) => Promise<void>;

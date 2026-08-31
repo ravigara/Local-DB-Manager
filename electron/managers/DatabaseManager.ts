@@ -6,9 +6,21 @@ import {
   StoredDatabase
 } from "../types/database";
 
+import type {
+  DatabaseEngine
+} from "../types/database";
+
 import {
   DockerManager
 } from "./DockerManager";
+
+import {
+  normalizeDatabaseStatus
+} from "../utils/DatabaseValidation";
+
+import {
+  getDatabaseEngineDefinition
+} from "../utils/DatabaseEngines";
 
 export class DatabaseManager {
 
@@ -19,7 +31,8 @@ export class DatabaseManager {
     return this.docker.isDockerRunning();
   }
 
-  async createMySQL(
+  async create(
+    engine: DatabaseEngine,
     name: string,
     port: number,
     password: string,
@@ -35,13 +48,23 @@ export class DatabaseManager {
     const volumeName =
       `ldb-${id}-data`;
 
-    await this.docker.createMySQLContainer(
-      containerName,
-      volumeName,
-      port,
-      password,
-      database
-    );
+    if (engine === "mysql") {
+      await this.docker.createMySQLContainer(
+        containerName,
+        volumeName,
+        port,
+        password,
+        database
+      );
+    } else {
+      await this.docker.createPostgreSQLContainer(
+        containerName,
+        volumeName,
+        port,
+        password,
+        database
+      );
+    }
 
     const dockerStatus =
       await this.docker.getContainerStatus(
@@ -54,9 +77,9 @@ export class DatabaseManager {
 
       name,
 
-      engine: "mysql",
+      engine,
 
-      version: "8.4",
+      version: getDatabaseEngineDefinition(engine).version,
 
       host: "localhost",
 
@@ -64,7 +87,7 @@ export class DatabaseManager {
 
       database,
 
-      username: "root",
+      username: getDatabaseEngineDefinition(engine).username,
 
       containerName,
 
@@ -87,19 +110,38 @@ export class DatabaseManager {
     );
 
     if (status === "not-found") {
-      await this.docker.recreateMySQLContainer(
-        database.containerName,
-        database.volumeName,
-        database.port,
-        password,
-        database.database
-      );
+      if (database.engine === "mysql") {
+        await this.docker.recreateMySQLContainer(
+          database.containerName,
+          database.volumeName,
+          database.port,
+          password,
+          database.database
+        );
+      } else {
+        await this.docker.recreatePostgreSQLContainer(
+          database.containerName,
+          database.volumeName,
+          database.port,
+          password,
+          database.database
+        );
+      }
       return;
     }
 
     return this.docker.startContainer(
       database.containerName
     );
+  }
+
+  async createMySQL(
+    name: string,
+    port: number,
+    password: string,
+    database: string
+  ): Promise<DatabaseConfig> {
+    return this.create("mysql", name, port, password, database);
   }
 
   async stop(
@@ -137,6 +179,7 @@ export class DatabaseManager {
   }
 
   async backupDatabase(
+    engine: DatabaseEngine,
     containerName: string,
     databaseName: string,
     rootPassword: string,
@@ -144,6 +187,7 @@ export class DatabaseManager {
   ): Promise<void> {
 
     return this.docker.backupDatabase(
+      engine,
       containerName,
       databaseName,
       rootPassword,
@@ -152,6 +196,7 @@ export class DatabaseManager {
   }
 
   async restoreDatabase(
+    engine: DatabaseEngine,
     containerName: string,
     databaseName: string,
     rootPassword: string,
@@ -159,6 +204,7 @@ export class DatabaseManager {
   ): Promise<void> {
 
     return this.docker.restoreDatabase(
+      engine,
       containerName,
       databaseName,
       rootPassword,
@@ -167,33 +213,7 @@ export class DatabaseManager {
   }
 
   private normalizeStatus(status: string): DatabaseStatus {
-    if (status === "running") {
-      return "running";
-    }
-
-    if (status === "healthy") {
-      return "running";
-    }
-
-    if (status === "not-found") {
-      return "not-found";
-    }
-
-    if (
-      status === "starting" ||
-      status === "exited" ||
-      status === "dead" ||
-      status === "stopped" ||
-      status === "created"
-    ) {
-      return status === "starting" ? "starting" : "stopped";
-    }
-
-    if (status === "unhealthy") {
-      return "error";
-    }
-
-    return "unknown";
+    return normalizeDatabaseStatus(status);
   }
 
   async removeContainer(

@@ -1,12 +1,12 @@
 # Local DB Manager
 
-Local DB Manager is a focused Windows desktop workspace for running and inspecting local MySQL environments through Docker Desktop. It gives developers a fast, visible workflow for creating a database, waiting for it to become ready, connecting to it, and managing its lifecycle without memorizing container commands.
+Local DB Manager is a focused Windows desktop workspace for running and inspecting local database environments through Docker Desktop. It gives developers a fast, visible workflow for creating a database, waiting for it to become ready, connecting to it, and managing its lifecycle without memorizing container commands.
 
 > A lightweight local database utility with the clarity of a desktop developer tool.
 
 ## What it does
 
-- Create MySQL 8.4 environments with a named persistent Docker volume.
+- Create MySQL 8.4 or PostgreSQL 17 environments with a named persistent Docker volume.
 - Start, stop, restart, inspect, and monitor container status.
 - Recreate a removed container while retaining its data volume.
 - Connect to a running instance and browse databases and tables.
@@ -19,7 +19,7 @@ Local DB Manager is a focused Windows desktop workspace for running and inspecti
 
 ## Current status
 
-The MySQL MVP is implemented end to end. The primary supported platform is Windows, and Docker Desktop must be running for database lifecycle, connection, backup, and restore operations. PostgreSQL, MariaDB, and additional database engines are planned for future iterations.
+The MySQL and PostgreSQL MVPs are implemented end to end. The primary supported platform is Windows, and Docker Desktop must be running for database lifecycle, connection, backup, and restore operations. MariaDB, additional engine versions, and reusable templates are planned for future iterations.
 
 ## Requirements
 
@@ -44,11 +44,11 @@ npm.cmd start
 1. Start Docker Desktop.
 2. Launch the app with `npm.cmd start`.
 3. Select **New environment**.
-4. Enter an environment name, database name, unused host port, and root password.
+4. Choose MySQL 8.4 or PostgreSQL 17, then enter an environment name, database name, unused host port, and admin password.
 5. Select **Create environment** and wait for the status to become **Running**.
 6. Select **Connect & inspect** to browse the instance or run SQL.
 
-The database name accepts letters, numbers, and underscores. Host ports must be whole numbers from `1024` through `65535`. The form validates these values inline before asking the Electron process to create the container.
+The database name accepts letters, numbers, and underscores. Host ports must be whole numbers from `1024` through `65535`; the defaults are `3307` for MySQL and `5433` for PostgreSQL. The form validates these values inline before asking the Electron process to create the container.
 
 ## Development commands
 
@@ -57,6 +57,9 @@ Run these commands from the repository root:
 ```powershell
 # Build Electron and the frontend
 npm.cmd run build
+
+# Run the Electron unit tests
+npm.cmd test
 
 # Lint the React renderer
 npm.cmd --prefix frontend run lint
@@ -70,10 +73,12 @@ npm.cmd run package
 
 The generated Windows installer is written to `release/Local DB Manager Setup 0.1.0.exe` when packaging completes.
 
+The root install must be present before running these commands. Use `npm.cmd ci` and `npm.cmd --prefix frontend ci` for a clean install from both lockfiles.
+
 ## Architecture
 
 ```text
-React + Vite renderer
+        React + Vite renderer
         │
         │ window.databaseAPI
         ▼
@@ -85,7 +90,7 @@ Electron main process
         │
         ├── SQLite application metadata
         ├── Docker container and volume lifecycle
-        └── MySQL connection, queries, CSV, backup, restore
+        └── MySQL/PostgreSQL connections, queries, CSV, backup, restore
 ```
 
 The renderer does not receive Node.js access. Electron keeps `contextIsolation` enabled and `nodeIntegration` disabled, while privileged filesystem, Docker, and database operations remain in the main process.
@@ -95,7 +100,7 @@ The renderer does not receive Node.js access. Electron keeps `contextIsolation` 
 - Each environment uses a named Docker volume so data survives normal container stops and container-only removal.
 - **Remove container** removes the container but intentionally retains the volume for later recreation.
 - **Delete permanently** removes the container, volume, and stored application metadata. Use it only when the data is no longer needed.
-- Backups and restores use native save/open dialogs and should be tested with disposable development data first.
+- Backups and restores use native save/open dialogs and the selected engine's native tools; test them with disposable development data first.
 - All database environments are local to the machine; the application is not a hosted database service.
 
 ## Verification
@@ -105,6 +110,8 @@ The current build has been checked with:
 - TypeScript/Electron build.
 - Vite production frontend build.
 - Frontend ESLint.
+- Seven automated Electron-side unit tests covering engine compatibility, input validation, Docker status normalization, and CSV escaping.
+- Disposable Docker integration tests for both MySQL and PostgreSQL covering readiness, stop/start, container recreation, direct connections, table inspection, CSV export, backup/restore, and volume data persistence (`npm.cmd run test:docker`).
 - Exact `npm.cmd start` Electron startup and renderer-load verification.
 - Actual rendered form smoke test covering all four create fields: environment name, database name, port, and root password.
 - Docker lifecycle smoke test covering MySQL readiness, stop/start/restart, backup/restore, and retained-volume container recreation.
@@ -122,7 +129,7 @@ Before a release, manually verify the complete acceptance flow with Docker Deskt
 
 ## Roadmap
 
-- PostgreSQL and MariaDB support.
+- MariaDB support.
 - Multiple engine versions and reusable environment templates.
 - Improved activity history and resource usage visibility.
 - Environment details view with connection information and logs.

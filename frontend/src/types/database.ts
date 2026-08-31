@@ -7,7 +7,10 @@ export type DatabaseStatus =
   | "not-found"
   | "unknown";
 
+export type DatabaseEngine = "mysql" | "postgresql";
+
 export interface CreateDatabaseConfig {
+  engine?: DatabaseEngine;
   name: string;
   port: number;
   password: string;
@@ -52,7 +55,7 @@ export interface FileOperationResult {
 export interface StoredDatabase {
   id: string;
   name: string;
-  engine: string;
+  engine: DatabaseEngine;
   version: string;
   host: string;
   port: number;

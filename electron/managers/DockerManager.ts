@@ -2,6 +2,9 @@ import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import { readFile, writeFile } from "fs/promises";
 
+import type { DatabaseEngine } from "../types/database";
+import { getDatabaseEngineDefinition } from "../utils/DatabaseEngines";
+
 const execFileAsync = promisify(execFile);
 
 export class DockerManager {
@@ -57,6 +60,46 @@ export class DockerManager {
     );
   }
 
+  async createPostgreSQLContainer(
+    containerName: string,
+    volumeName: string,
+    port: number,
+    password: string,
+    database: string
+  ): Promise<string> {
+    return this.runPostgreSQLContainer(
+      containerName,
+      volumeName,
+      port,
+      password,
+      database,
+      true
+    );
+  }
+
+  async recreatePostgreSQLContainer(
+    containerName: string,
+    volumeName: string,
+    port: number,
+    password: string,
+    database: string
+  ): Promise<string> {
+    if (!(await this.hasVolume(volumeName))) {
+      throw new Error(
+        `Database volume "${volumeName}" was not found. Delete this environment and create it again.`
+      );
+    }
+
+    return this.runPostgreSQLContainer(
+      containerName,
+      volumeName,
+      port,
+      password,
+      database,
+      false
+    );
+  }
+
   private async runMySQLContainer(
     containerName: string,
     volumeName: string,
@@ -100,8 +143,65 @@ export class DockerManager {
       "--health-start-period",
       "5s",
 
-      "mysql:8.4"
+      getDatabaseEngineDefinition("mysql").image
     ];
+
+    return this.runContainer(
+      args,
+      containerName,
+      volumeName,
+      removeVolumeOnFailure
+    );
+  }
+
+  private async runPostgreSQLContainer(
+    containerName: string,
+    volumeName: string,
+    port: number,
+    password: string,
+    database: string,
+    removeVolumeOnFailure: boolean
+  ): Promise<string> {
+    const args = [
+      "run",
+      "-d",
+      "--name",
+      containerName,
+      "-e",
+      `POSTGRES_PASSWORD=${password}`,
+      "-e",
+      `POSTGRES_DB=${database}`,
+      "-p",
+      `${port}:${getDatabaseEngineDefinition("postgresql").internalPort}`,
+      "-v",
+      `${volumeName}:/var/lib/postgresql/data`,
+      "--health-cmd",
+      `pg_isready -U ${getDatabaseEngineDefinition("postgresql").username} -d ${database}`,
+      "--health-interval",
+      "2s",
+      "--health-timeout",
+      "5s",
+      "--health-retries",
+      "15",
+      "--health-start-period",
+      "5s",
+      getDatabaseEngineDefinition("postgresql").image
+    ];
+
+    return this.runContainer(
+      args,
+      containerName,
+      volumeName,
+      removeVolumeOnFailure
+    );
+  }
+
+  private async runContainer(
+    args: string[],
+    containerName: string,
+    volumeName: string,
+    removeVolumeOnFailure: boolean
+  ): Promise<string> {
 
     try {
       const { stdout } =
@@ -336,33 +436,47 @@ async removeVolume(
   }
 
   async backupDatabase(
+    engine: DatabaseEngine,
     containerName: string,
     databaseName: string,
     rootPassword: string,
     destinationPath: string
   ): Promise<void> {
 
+    const definition = getDatabaseEngineDefinition(engine);
+    const command = engine === "mysql" ? [
+      "mysqldump",
+      "--single-transaction",
+      "--routines",
+      "--events",
+      "--triggers",
+      `-u${definition.username}`,
+      databaseName
+    ] : [
+      "pg_dump",
+      "-U",
+      definition.username,
+      "-d",
+      databaseName
+    ];
+    const passwordVariable = engine === "mysql" ? "MYSQL_PWD" : "PGPASSWORD";
     const { stdout } = await execFileAsync(
       "docker",
-      [
-        "exec",
-        containerName,
-        "mysqldump",
-        "--single-transaction",
-        "--routines",
-        "--events",
-        "--triggers",
-        "-uroot",
-        `-p${rootPassword}`,
-        databaseName
-      ],
-      { maxBuffer: 200 * 1024 * 1024 }
+      ["exec", "-e", `${passwordVariable}=${rootPassword}`, containerName, ...command],
+      {
+        env: {
+          ...process.env,
+          [passwordVariable]: rootPassword
+        },
+        maxBuffer: 200 * 1024 * 1024
+      }
     );
 
     await writeFile(destinationPath, stdout, "utf8");
   }
 
   async restoreDatabase(
+    engine: DatabaseEngine,
     containerName: string,
     databaseName: string,
     rootPassword: string,
@@ -372,18 +486,36 @@ async removeVolume(
     const dump = await readFile(sourcePath);
 
     await new Promise<void>((resolve, reject) => {
+      const definition = getDatabaseEngineDefinition(engine);
+      const passwordVariable = engine === "mysql" ? "MYSQL_PWD" : "PGPASSWORD";
+      const command = engine === "mysql" ? [
+        "mysql",
+        `-u${definition.username}`,
+        databaseName
+      ] : [
+        "psql",
+        "-U",
+        definition.username,
+        "-d",
+        databaseName
+      ];
       const child = spawn(
         "docker",
         [
           "exec",
           "-i",
+          "-e",
+          `${passwordVariable}=${rootPassword}`,
           containerName,
-          "mysql",
-          "-uroot",
-          `-p${rootPassword}`,
-          databaseName
+          ...command
         ],
-        { stdio: ["pipe", "ignore", "pipe"] }
+        {
+          env: {
+            ...process.env,
+            [passwordVariable]: rootPassword
+          },
+          stdio: ["pipe", "ignore", "pipe"]
+        }
       );
       const stderrChunks: Buffer[] = [];
 
