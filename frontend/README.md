@@ -1,75 +1,86 @@
-# React + TypeScript + Vite
+# Local DB Manager renderer
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This directory contains the React + TypeScript + Vite renderer for Local DB Manager. It is the user-facing dashboard hosted by the Electron main process. The renderer is not a general web application: it must remain compatible with the preload boundary and must not access Node.js, Docker, the filesystem, or database drivers directly.
 
-Currently, two official plugins are available:
+## Responsibilities
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+`src/App.tsx` owns the current dashboard workflow:
 
-## React Compiler
+- show saved environments and normalized lifecycle status;
+- create MySQL 8.4, PostgreSQL 17, and MariaDB 11.4 environments;
+- start, stop, restart, remove, and permanently delete environments;
+- connect and browse databases/tables;
+- inspect table columns and sample rows;
+- execute SQL and display normalized results;
+- export CSV and invoke database backup/restore dialogs.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The renderer calls the typed surface declared in `src/types/electron.d.ts` as `window.databaseAPI`. The implementation of that surface lives in `../electron/preload.ts`; the corresponding IPC handlers live in `../electron/main.ts` and are fulfilled by the Electron services.
 
-## Expanding the ESLint configuration
+## Engine-aware UI rules
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+The supported engine contract is currently:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+| Engine | Display version | Default host port | Notes |
+| --- | --- | ---: | --- |
+| MySQL | 8.4 | 3307 | Uses the MySQL-compatible adapter and default schema. |
+| PostgreSQL | 17 | 5433 | Uses the PostgreSQL adapter and the `public` schema. |
+| MariaDB | 11.4 | 3308 | Uses the MySQL-compatible adapter and default schema. |
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+If an engine is added, update both the backend registry and the renderer's `DatabaseEngine` type, selection options, labels, and default-port behavior. Existing saved records must remain renderable. Do not infer the engine from the port; use the stored `engine` field.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Development commands
 
+Run these commands from the repository root:
+
+```powershell
+# Build the renderer only
+npm.cmd --prefix frontend run build
+
+# Run renderer lint
+npm.cmd --prefix frontend run lint
+
+# Start Vite for renderer development
+npm.cmd run dev:frontend
+
+# Run Electron against the Vite development server
+npm.cmd run dev:electron
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+`dev:electron` expects the Vite server at `http://localhost:5173` through `LOCAL_DB_MANAGER_DEV_URL`. The normal `npm.cmd start` path builds both projects and serves `frontend/dist` through Electron's loopback server.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+For a complete repository gate, use the root commands instead:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```powershell
+npm.cmd test
+npm.cmd run build
+npm.cmd --prefix frontend run lint
+npm.cmd run test:docker
+npm.cmd run package
 ```
+
+The Docker suite requires Docker Desktop and uses disposable containers for all three engines. The root test command currently runs the Electron-side unit tests; there is no separate Jest/Vitest renderer test suite yet. Renderer correctness is currently checked by TypeScript/Vite build, ESLint, and manual or smoke verification of the creation form and dashboard actions.
+
+## Renderer implementation notes
+
+- Keep API calls in `App.tsx` or extracted UI hooks/components; never import `electron`, `fs`, `child_process`, `mysql2`, or `pg` here.
+- Treat every value from the bridge as untrusted and display errors through the existing UI error paths.
+- Keep loading/action state scoped to the affected environment where possible so one database card does not block unrelated cards.
+- Use `engineLabel` and `defaultPortForEngine` for engine-specific display behavior instead of repeating string comparisons throughout the JSX.
+- Keep destructive actions visibly distinct and preserve the distinction between removing a container (retains the volume) and permanently deleting an environment (removes the volume and metadata).
+- When adding UI behavior, update the corresponding type declaration in `src/types/electron.d.ts` and the actual preload exposure together.
+
+## Files
+
+| Path | Responsibility |
+| --- | --- |
+| `src/App.tsx` | Main dashboard and interaction state. |
+| `src/App.css` | Dashboard/dialog component styles. |
+| `src/index.css` | Global typography, colors, and layout defaults. |
+| `src/types/database.ts` | Renderer-side data contracts and engine union. |
+| `src/types/electron.d.ts` | TypeScript declaration for `window.databaseAPI`. |
+| `src/main.tsx` | React entry point. |
+| `dist/` | Generated Vite output; do not edit manually. |
+
+## Next-session handoff
+
+The backend currently supports the three engine options listed above and the renderer exposes all three. The next planned direction is multiple engine versions and reusable environment templates. Start by inspecting `electron/utils/DatabaseEngines.ts`, `electron/managers/DockerManager.ts`, `electron/services/DatabaseConnectionService.ts`, and this file before changing the creation flow. Preserve the existing integration matrix and run the full root verification commands before committing.

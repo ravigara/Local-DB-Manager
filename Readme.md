@@ -21,6 +21,8 @@ Local DB Manager is a focused Windows desktop workspace for running and inspecti
 
 The MySQL, PostgreSQL, and MariaDB MVPs are implemented end to end. The primary supported platform is Windows, and Docker Desktop must be running for database lifecycle, connection, backup, and restore operations. Additional engine versions and reusable templates are planned for future iterations.
 
+The last implementation milestones are `c2be251` (PostgreSQL support) and `ce5f57e` (MariaDB support). The next session should begin with `git status --short`, `git log -5 --oneline`, and the verification commands in this document before starting new feature work.
+
 ## Requirements
 
 - Windows 10 or later.
@@ -95,6 +97,45 @@ Electron main process
 
 The renderer does not receive Node.js access. Electron keeps `contextIsolation` enabled and `nodeIntegration` disabled, while privileged filesystem, Docker, and database operations remain in the main process.
 
+## Repository map
+
+| Path | Responsibility |
+| --- | --- |
+| `electron/main.ts` | Creates the `BrowserWindow`, serves the built frontend over loopback, and registers IPC handlers. |
+| `electron/preload.ts` | Exposes the allow-listed `window.databaseAPI` bridge to the renderer. |
+| `electron/services/DatabaseService.ts` | Validates requests, checks Docker and ports, and coordinates persistence, lifecycle, and database operations. |
+| `electron/managers/DatabaseManager.ts` | Maps a stored environment to the correct Docker lifecycle implementation. |
+| `electron/managers/DockerManager.ts` | Runs Docker commands, waits for health, manages volumes, and invokes native dump/restore tools. |
+| `electron/services/DatabaseConnectionService.ts` | Uses `mysql2` for MySQL/MariaDB and `pg` for PostgreSQL; normalizes query results for the UI. |
+| `electron/database/AppDatabase.ts` | Stores environment metadata in SQLite and encrypts passwords with Electron `safeStorage`. |
+| `electron/utils/DatabaseEngines.ts` | Single engine registry for labels, versions, images, ports, internal ports, and usernames. |
+| `electron/utils/DatabaseValidation.ts` | Validates names, ports, table names, statuses, and CSV values. |
+| `electron/tests/` | Unit tests and disposable Docker integration tests. |
+| `frontend/src/App.tsx` | Dashboard, creation dialog, lifecycle actions, connection browser, query console, and backup/export controls. |
+| `frontend/src/types/electron.d.ts` | Renderer-side declaration of the preload API. |
+
+## Supported engine contract
+
+| Engine | Image | Host default | Container port | User | Adapter |
+| --- | --- | ---: | ---: | --- | --- |
+| MySQL | `mysql:8.4` | `3307` | `3306` | `root` | `mysql2` |
+| PostgreSQL | `postgres:17` | `5433` | `5432` | `postgres` | `pg` |
+| MariaDB | `mariadb:11.4` | `3308` | `3306` | `root` | `mysql2` |
+
+Engine behavior is centralized in `electron/utils/DatabaseEngines.ts`. When adding an engine or changing a version, update that registry, the `DatabaseEngine` union in both type locations, the manager lifecycle switch, the connection adapter, the renderer selection/labels, and the integration matrix together. MySQL and MariaDB share SQL quoting, `SHOW` metadata queries, and MySQL-compatible clients, but MariaDB uses `mariadb-admin`, `mariadb-dump`, and `mariadb` inside its container.
+
+## Runtime and data flow
+
+1. The renderer sends a request through `window.databaseAPI`.
+2. The preload bridge forwards only the named IPC operation.
+3. `DatabaseService` validates the payload, checks Docker/ports, and reads or writes application metadata.
+4. `DatabaseManager` selects the engine-specific Docker implementation.
+5. `DockerManager` creates a named container and named volume, waits for a healthy/running state, and returns normalized status.
+6. Credentials are encrypted before they are stored in the application SQLite database. The password is not part of `StoredDatabase` records.
+7. Connections, SQL, CSV export, backup, and restore run in the Electron main process. The renderer receives normalized data only.
+
+PostgreSQL uses the `public` schema for table browsing. MySQL and MariaDB use the selected database's default schema. Table names are validated before they are quoted into metadata and export queries.
+
 ## Data and destructive actions
 
 - Each environment uses a named Docker volume so data survives normal container stops and container-only removal.
@@ -117,6 +158,8 @@ The current build has been checked with:
 - Docker lifecycle smoke test covering MySQL readiness, stop/start/restart, backup/restore, and retained-volume container recreation.
 - Windows installer packaging with electron-builder.
 
+The Docker integration suite creates disposable `ldb-test-*` containers and volumes and removes them in a `finally` cleanup block. If a test is interrupted, check for leftovers with `docker ps -a --filter name=ldb-test-` and `docker volume ls --filter name=ldb-test-` before continuing.
+
 Before a release, manually verify the complete acceptance flow with Docker Desktop running:
 
 1. Type into every create form field and confirm each value remains visible.
@@ -134,6 +177,14 @@ Before a release, manually verify the complete acceptance flow with Docker Deskt
 - Environment details view with connection information and logs.
 - Search, filtering, and richer table management workflows.
 - Automated release checks and cross-platform packaging.
+
+The next implementation should be selected from the roadmap only after checking the current engine registry and integration suite. The highest-value follow-up is version/template support: make engine definitions configurable without duplicating Docker and renderer branches. Keep the current three-engine behavior as regression coverage while introducing that abstraction.
+
+## Session handoff
+
+The current build supports MySQL 8.4, PostgreSQL 17, and MariaDB 11.4 end to end. Before beginning another feature, run `git status --short`, `npm.cmd test`, `npm.cmd run build`, and `npm.cmd --prefix frontend run lint`. If Docker behavior is involved, also run `npm.cmd run test:docker`. Do not assume the installer is current unless `npm.cmd run package` has been run after the latest source changes.
+
+For phased work, finish one phase before editing the next: define the contract, implement the Electron/backend path, expose the renderer behavior, run the relevant unit/build/lint/integration gates, update both README files, and commit the completed phase. Preserve the preload boundary and keep destructive Docker operations explicit in the UI.
 
 ## Contributing
 
