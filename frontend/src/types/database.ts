@@ -7,7 +7,7 @@ export type DatabaseStatus =
   | "not-found"
   | "unknown";
 
-export type DatabaseEngine = "mysql" | "postgresql" | "mariadb";
+export type DatabaseEngine = "mysql" | "postgresql" | "mariadb" | "mongodb";
 
 export interface CreateDatabaseConfig {
   engine?: DatabaseEngine;

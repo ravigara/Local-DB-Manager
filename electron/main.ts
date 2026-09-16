@@ -266,9 +266,9 @@ function registerIpcHandlers(databaseService: DatabaseService) {
     async (event, id: unknown) => {
       const window = BrowserWindow.fromWebContents(event.sender) ?? undefined;
       const saveOptions: SaveDialogOptions = {
-        title: "Back up database",
-        defaultPath: "database-backup.sql",
-        filters: [{ name: "SQL files", extensions: ["sql"] }],
+      title: "Back up database",
+        defaultPath: "database-backup.archive",
+        filters: [{ name: "Database backups", extensions: ["archive", "sql"] }],
         properties: ["createDirectory", "showOverwriteConfirmation"]
       };
       const saveResult = window
@@ -289,7 +289,7 @@ function registerIpcHandlers(databaseService: DatabaseService) {
       const window = BrowserWindow.fromWebContents(event.sender) ?? undefined;
       const openOptions = {
         title: "Restore database backup",
-        filters: [{ name: "SQL files", extensions: ["sql"] }],
+        filters: [{ name: "Database backups", extensions: ["archive", "sql"] }],
         properties: ["openFile"] as Array<"openFile">
       };
       const openResult = window

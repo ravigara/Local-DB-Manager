@@ -37,6 +37,15 @@ const definitions: Record<DatabaseEngine, DatabaseEngineDefinition> = {
     defaultPort: 3308,
     internalPort: 3306,
     username: "root"
+  },
+  mongodb: {
+    engine: "mongodb",
+    label: "MongoDB",
+    version: "8.0",
+    image: "mongo:8.0",
+    defaultPort: 27017,
+    internalPort: 27017,
+    username: "root"
   }
 };
 
@@ -45,7 +54,7 @@ export function parseDatabaseEngine(value: unknown): DatabaseEngine {
     return "mysql";
   }
 
-  if (value === "mysql" || value === "postgresql" || value === "mariadb") {
+  if (value === "mysql" || value === "postgresql" || value === "mariadb" || value === "mongodb") {
     return value;
   }
 

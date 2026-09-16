@@ -140,6 +140,29 @@ export class DockerManager {
     );
   }
 
+  async createMongoDBContainer(
+    containerName: string,
+    volumeName: string,
+    port: number,
+    password: string,
+    database: string
+  ): Promise<string> {
+    return this.runMongoDBContainer(containerName, volumeName, port, password, database, true);
+  }
+
+  async recreateMongoDBContainer(
+    containerName: string,
+    volumeName: string,
+    port: number,
+    password: string,
+    database: string
+  ): Promise<string> {
+    if (!(await this.hasVolume(volumeName))) {
+      throw new Error(`Database volume "${volumeName}" was not found. Delete this environment and create it again.`);
+    }
+    return this.runMongoDBContainer(containerName, volumeName, port, password, database, false);
+  }
+
   private async runMySQLContainer(
     containerName: string,
     volumeName: string,
@@ -277,6 +300,29 @@ export class DockerManager {
       volumeName,
       removeVolumeOnFailure
     );
+  }
+
+  private async runMongoDBContainer(
+    containerName: string,
+    volumeName: string,
+    port: number,
+    password: string,
+    database: string,
+    removeVolumeOnFailure: boolean
+  ): Promise<string> {
+    const definition = getDatabaseEngineDefinition("mongodb");
+    const args = [
+      "run", "-d", "--name", containerName,
+      "-e", "MONGO_INITDB_ROOT_USERNAME=root",
+      "-e", `MONGO_INITDB_ROOT_PASSWORD=${password}`,
+      "-p", `${port}:${definition.internalPort}`,
+      "-v", `${volumeName}:/data/db`,
+      "--health-cmd", "mongosh --quiet --eval db.adminCommand('ping').ok || exit 1",
+      "--health-interval", "2s", "--health-timeout", "5s",
+      "--health-retries", "15", "--health-start-period", "5s",
+      definition.image
+    ];
+    return this.runContainer(args, containerName, volumeName, removeVolumeOnFailure);
   }
 
   private async runContainer(
@@ -527,6 +573,15 @@ async removeVolume(
   ): Promise<void> {
 
     const definition = getDatabaseEngineDefinition(engine);
+    if (engine === "mongodb") {
+      const { stdout } = await execFileAsync("docker", [
+        "exec", containerName, "mongodump", "--username", definition.username,
+        "--password", rootPassword, "--authenticationDatabase", "admin",
+        "--db", databaseName, "--archive"
+      ], { maxBuffer: 200 * 1024 * 1024, encoding: "buffer" });
+      await writeFile(destinationPath, stdout);
+      return;
+    }
     const command = engine === "mysql" || engine === "mariadb" ? [
       engine === "mariadb" ? "mariadb-dump" : "mysqldump",
       "--single-transaction",
@@ -570,6 +625,20 @@ async removeVolume(
 
     await new Promise<void>((resolve, reject) => {
       const definition = getDatabaseEngineDefinition(engine);
+      if (engine === "mongodb") {
+        const child = spawn("docker", [
+          "exec", "-i", containerName, "mongorestore", "--username", definition.username,
+          "--password", rootPassword, "--authenticationDatabase", "admin", "--db", databaseName,
+          "--drop", "--archive"
+        ], { stdio: ["pipe", "ignore", "pipe"] });
+        const stderrChunks: Buffer[] = [];
+        if (!child.stdin || !child.stderr) { child.kill(); reject(new Error("Unable to open the Docker restore process")); return; }
+        child.stderr.on("data", chunk => stderrChunks.push(Buffer.from(chunk as Uint8Array)));
+        child.once("error", reject);
+        child.once("close", code => code === 0 ? resolve() : reject(new Error(Buffer.concat(stderrChunks).toString("utf8").trim() || `Database restore failed with exit code ${String(code)}`)));
+        child.stdin.end(dump);
+        return;
+      }
       const passwordVariable = engine === "mysql" || engine === "mariadb" ? "MYSQL_PWD" : "PGPASSWORD";
       const command = engine === "mysql" || engine === "mariadb" ? [
         engine === "mariadb" ? "mariadb" : "mysql",

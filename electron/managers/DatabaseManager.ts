@@ -64,8 +64,16 @@ export class DatabaseManager {
         password,
         database
       );
-    } else {
+    } else if (engine === "mariadb") {
       await this.docker.createMariaDBContainer(
+        containerName,
+        volumeName,
+        port,
+        password,
+        database
+      );
+    } else {
+      await this.docker.createMongoDBContainer(
         containerName,
         volumeName,
         port,
@@ -134,8 +142,16 @@ export class DatabaseManager {
           password,
           database.database
         );
-      } else {
+      } else if (database.engine === "mariadb") {
         await this.docker.recreateMariaDBContainer(
+          database.containerName,
+          database.volumeName,
+          database.port,
+          password,
+          database.database
+        );
+      } else {
+        await this.docker.recreateMongoDBContainer(
           database.containerName,
           database.volumeName,
           database.port,

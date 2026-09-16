@@ -6,6 +6,7 @@ import type {
   RowDataPacket
 } from "mysql2/promise";
 import { Client as PostgreSQLClient } from "pg";
+import { MongoClient } from "mongodb";
 import { writeFile } from "fs/promises";
 import path from "path";
 
@@ -37,6 +38,11 @@ export class DatabaseConnectionService {
   constructor(private readonly database: AppDatabase) {}
 
   async ping(id: unknown): Promise<boolean> {
+    if (this.getDatabase(id).engine === "mongodb") {
+      const client = await this.connectMongo(id);
+      try { await client.db(this.getDatabase(id).database).command({ ping: 1 }); return true; }
+      finally { await client.close(); }
+    }
     const connection = await this.connect(id);
 
     try {
@@ -49,6 +55,11 @@ export class DatabaseConnectionService {
 
   async listDatabases(id: unknown): Promise<string[]> {
     const record = this.getDatabase(id);
+    if (record.engine === "mongodb") {
+      const client = await this.connectMongo(id);
+      try { return (await client.db("admin").admin().listDatabases()).databases.map(item => item.name); }
+      finally { await client.close(); }
+    }
     const connection = await this.connect(id);
 
     try {
@@ -69,6 +80,11 @@ export class DatabaseConnectionService {
 
   async listTables(id: unknown): Promise<string[]> {
     const record = this.getDatabase(id);
+    if (record.engine === "mongodb") {
+      const client = await this.connectMongo(id);
+      try { return (await client.db(record.database).listCollections({}, { nameOnly: true }).toArray()).map(item => item.name); }
+      finally { await client.close(); }
+    }
     const connection = await this.connect(id);
 
     try {
@@ -106,6 +122,8 @@ export class DatabaseConnectionService {
       throw new Error("SQL parameters must be an array");
     }
 
+    const record = this.getDatabase(id);
+    if (record.engine === "mongodb") return this.mongoQuery(id, sql);
     const connection = await this.connect(id);
     const startedAt = Date.now();
 
@@ -129,6 +147,14 @@ export class DatabaseConnectionService {
   ): Promise<TableDetails> {
     const table = validateTableName(tableName);
     const record = this.getDatabase(id);
+    if (record.engine === "mongodb") {
+      const client = await this.connectMongo(id);
+      try {
+        const rows = await client.db(record.database).collection(table).find({}).limit(100).toArray();
+        const columns = [...new Set(rows.flatMap(row => Object.keys(row)))];
+        return { tableName: table, columns: columns.map(name => ({ name, type: this.mongoType(rows.find(row => row[name])?.[name]), nullable: true, key: name === "_id" ? "PRI" : "", defaultValue: null, extra: "" })), rows: rows.map(row => this.mongoRow(row, columns)) };
+      } finally { await client.close(); }
+    }
     const connection = await this.connect(id);
 
     try {
@@ -189,6 +215,16 @@ export class DatabaseConnectionService {
     }
 
     const record = this.getDatabase(id);
+    if (record.engine === "mongodb") {
+      const client = await this.connectMongo(id);
+      try {
+        const rows = await client.db(record.database).collection(table).find({}).toArray();
+        const columns = [...new Set(rows.flatMap(row => Object.keys(row)))];
+        const csvRows = [columns.map(column => toCsvCell(column)).join(","), ...rows.map(row => columns.map(column => toCsvCell(this.toQueryCell(row[column]))).join(","))];
+        await writeFile(destinationPath, `${csvRows.join("\r\n")}\r\n`, "utf8");
+        return { canceled: false, filePath: destinationPath, rowCount: rows.length };
+      } finally { await client.close(); }
+    }
     const connection = await this.connect(id);
 
     try {
@@ -263,6 +299,52 @@ export class DatabaseConnectionService {
       },
       end: () => connection.end()
     };
+  }
+
+  private async connectMongo(id: unknown): Promise<MongoClient> {
+    const record = this.getDatabase(id);
+    const password = this.database.getPassword(record.id);
+    if (password === undefined) throw new Error("Database credentials are unavailable. Recreate this environment to connect.");
+    const client = new MongoClient(`mongodb://${encodeURIComponent(record.username)}:${encodeURIComponent(password)}@${record.host}:${record.port}/?authSource=admin`, { serverSelectionTimeoutMS: 5000 });
+    await client.connect();
+    return client;
+  }
+
+  private async mongoQuery(id: unknown, source: string): Promise<QueryResult> {
+    let request: unknown;
+    try { request = JSON.parse(source); } catch { throw new Error("MongoDB queries must be valid JSON"); }
+    if (!request || typeof request !== "object") throw new Error("MongoDB query must be a JSON object");
+    const value = request as { collection?: unknown; operation?: unknown; filter?: unknown; document?: unknown; update?: unknown; options?: unknown };
+    if (typeof value.collection !== "string" || !value.collection.trim() || typeof value.operation !== "string") throw new Error("MongoDB query requires collection and operation");
+    const client = await this.connectMongo(id);
+    const collection = client.db(this.getDatabase(id).database).collection(value.collection);
+    const startedAt = Date.now();
+    try {
+      const filter = value.filter && typeof value.filter === "object" ? value.filter : {};
+      let rows: Record<string, unknown>[] = [];
+      let affectedRows = 0;
+      switch (value.operation) {
+        case "find": rows = await collection.find(filter).limit(Number((value.options as { limit?: number } | undefined)?.limit ?? 100)).toArray() as Record<string, unknown>[]; break;
+        case "countDocuments": rows = [{ count: await collection.countDocuments(filter) }]; break;
+        case "insertOne": { const result = await collection.insertOne((value.document ?? {}) as Record<string, unknown>); rows = [{ insertedId: result.insertedId.toString() }]; affectedRows = result.acknowledged ? 1 : 0; break; }
+        case "updateMany": { const result = await collection.updateMany(filter, (value.update ?? {}) as Record<string, unknown>); rows = [{ matchedCount: result.matchedCount, modifiedCount: result.modifiedCount }]; affectedRows = result.modifiedCount; break; }
+        case "deleteMany": { const result = await collection.deleteMany(filter); rows = [{ deletedCount: result.deletedCount }]; affectedRows = result.deletedCount; break; }
+        default: throw new Error("Unsupported MongoDB operation. Use find, countDocuments, insertOne, updateMany, or deleteMany.");
+      }
+      const columns = [...new Set(rows.flatMap(row => Object.keys(row)))];
+      return { columns, rows: rows.map(row => this.mongoRow(row, columns)), affectedRows, executionTimeMs: Date.now() - startedAt };
+    } finally { await client.close(); }
+  }
+
+  private mongoRow(row: Record<string, unknown>, columns: string[]): Record<string, QueryCell> {
+    return Object.fromEntries(columns.map(column => [column, this.toQueryCell(row[column])]));
+  }
+
+  private mongoType(value: unknown): string {
+    if (value === null || value === undefined) return "unknown";
+    if (value instanceof Date) return "date";
+    if (Array.isArray(value)) return "array";
+    return typeof value;
   }
 
   private wrapMySQLConnection(connection: MySQLConnection): DatabaseConnection {

@@ -6,10 +6,10 @@ Local DB Manager is a focused Windows desktop workspace for running and inspecti
 
 ## What it does
 
-- Create MySQL 8.4, PostgreSQL 17, or MariaDB 11.4 environments with a named persistent Docker volume.
+- Create MySQL 8.4, PostgreSQL 17, MariaDB 11.4, or MongoDB 8.0 environments with a named persistent Docker volume.
 - Start, stop, restart, inspect, and monitor container status.
 - Recreate a removed container while retaining its data volume.
-- Connect to a running instance and browse databases and tables.
+- Connect to a running instance and browse databases, SQL tables, or MongoDB collections.
 - Inspect table columns and sample rows.
 - Run SQL queries and view structured results.
 - Export table data to CSV.
@@ -19,7 +19,7 @@ Local DB Manager is a focused Windows desktop workspace for running and inspecti
 
 ## Current status
 
-The MySQL, PostgreSQL, and MariaDB MVPs are implemented end to end. The primary supported platform is Windows, and Docker Desktop must be running for database lifecycle, connection, backup, and restore operations. Additional engine versions and reusable templates are planned for future iterations.
+The MySQL, PostgreSQL, MariaDB, and MongoDB MVPs are implemented end to end. The primary supported platform is Windows, and Docker Desktop must be running for database lifecycle, connection, backup, and restore operations. Additional engine versions and reusable templates are planned for future iterations.
 
 The last implementation milestones are `c2be251` (PostgreSQL support) and `ce5f57e` (MariaDB support). The next session should begin with `git status --short`, `git log -5 --oneline`, and the verification commands in this document before starting new feature work.
 
@@ -46,11 +46,11 @@ npm.cmd start
 1. Start Docker Desktop.
 2. Launch the app with `npm.cmd start`.
 3. Select **New environment**.
-4. Choose MySQL 8.4, PostgreSQL 17, or MariaDB 11.4, then enter an environment name, database name, unused host port, and admin password.
+4. Choose MySQL 8.4, PostgreSQL 17, MariaDB 11.4, or MongoDB 8.0, then enter an environment name, database name, unused host port, and admin password.
 5. Select **Create environment** and wait for the status to become **Running**.
 6. Select **Connect & inspect** to browse the instance or run SQL.
 
-The database name accepts letters, numbers, and underscores. Host ports must be whole numbers from `1024` through `65535`; the defaults are `3307` for MySQL, `5433` for PostgreSQL, and `3308` for MariaDB. The form validates these values inline before asking the Electron process to create the container.
+The database name accepts letters, numbers, and underscores. Host ports must be whole numbers from `1024` through `65535`; the defaults are `3307` for MySQL, `5433` for PostgreSQL, `3308` for MariaDB, and `27017` for MongoDB. The form validates these values inline before asking the Electron process to create the container.
 
 ## Development commands
 
@@ -92,7 +92,7 @@ Electron main process
         │
         ├── SQLite application metadata
         ├── Docker container and volume lifecycle
-        └── MySQL/PostgreSQL/MariaDB connections, queries, CSV, backup, restore
+        └── MySQL/PostgreSQL/MariaDB/MongoDB connections, queries, CSV, backup, restore
 ```
 
 The renderer does not receive Node.js access. Electron keeps `contextIsolation` enabled and `nodeIntegration` disabled, while privileged filesystem, Docker, and database operations remain in the main process.
@@ -106,7 +106,7 @@ The renderer does not receive Node.js access. Electron keeps `contextIsolation` 
 | `electron/services/DatabaseService.ts` | Validates requests, checks Docker and ports, and coordinates persistence, lifecycle, and database operations. |
 | `electron/managers/DatabaseManager.ts` | Maps a stored environment to the correct Docker lifecycle implementation. |
 | `electron/managers/DockerManager.ts` | Runs Docker commands, waits for health, manages volumes, and invokes native dump/restore tools. |
-| `electron/services/DatabaseConnectionService.ts` | Uses `mysql2` for MySQL/MariaDB and `pg` for PostgreSQL; normalizes query results for the UI. |
+| `electron/services/DatabaseConnectionService.ts` | Uses `mysql2` for MySQL/MariaDB, `pg` for PostgreSQL, and `mongodb` for MongoDB; normalizes query results for the UI. |
 | `electron/database/AppDatabase.ts` | Stores environment metadata in SQLite and encrypts passwords with Electron `safeStorage`. |
 | `electron/utils/DatabaseEngines.ts` | Single engine registry for labels, versions, images, ports, internal ports, and usernames. |
 | `electron/utils/DatabaseValidation.ts` | Validates names, ports, table names, statuses, and CSV values. |
@@ -121,6 +121,7 @@ The renderer does not receive Node.js access. Electron keeps `contextIsolation` 
 | MySQL | `mysql:8.4` | `3307` | `3306` | `root` | `mysql2` |
 | PostgreSQL | `postgres:17` | `5433` | `5432` | `postgres` | `pg` |
 | MariaDB | `mariadb:11.4` | `3308` | `3306` | `root` | `mysql2` |
+| MongoDB | `mongo:8.0` | `27017` | `27017` | `root` | `mongodb` |
 
 Engine behavior is centralized in `electron/utils/DatabaseEngines.ts`. When adding an engine or changing a version, update that registry, the `DatabaseEngine` union in both type locations, the manager lifecycle switch, the connection adapter, the renderer selection/labels, and the integration matrix together. MySQL and MariaDB share SQL quoting, `SHOW` metadata queries, and MySQL-compatible clients, but MariaDB uses `mariadb-admin`, `mariadb-dump`, and `mariadb` inside its container.
 
@@ -134,7 +135,7 @@ Engine behavior is centralized in `electron/utils/DatabaseEngines.ts`. When addi
 6. Credentials are encrypted before they are stored in the application SQLite database. The password is not part of `StoredDatabase` records.
 7. Connections, SQL, CSV export, backup, and restore run in the Electron main process. The renderer receives normalized data only.
 
-PostgreSQL uses the `public` schema for table browsing. MySQL and MariaDB use the selected database's default schema. Table names are validated before they are quoted into metadata and export queries.
+PostgreSQL uses the `public` schema for table browsing. MySQL and MariaDB use the selected database's default schema. MongoDB exposes collections as tables in the explorer. Its query console accepts JSON such as `{"collection":"users","operation":"find","filter":{}}`; supported operations are `find`, `countDocuments`, `insertOne`, `updateMany`, and `deleteMany`.
 
 ## Data and destructive actions
 
